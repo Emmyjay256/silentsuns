@@ -533,21 +533,24 @@
 }
 
     function latLonToLocal(latDeg, lonDeg, rLocal){
-      const lat = THREE.MathUtils.degToRad(latDeg);
-      const lon = THREE.MathUtils.degToRad(lonDeg);
-      const dir = new THREE.Vector3(
-        Math.cos(lat)*Math.cos(lon),
-        Math.sin(lat),
-        Math.cos(lat)*Math.sin(lon)
-      ).normalize();
-      // place slightly above surface
-      const lift = 0.02;
-      pinGroup.position.copy(dir).multiplyScalar(rLocal + lift);
+  // Convert to radians
+  const lat = THREE.MathUtils.degToRad(latDeg);
+  const lon = THREE.MathUtils.degToRad(-lonDeg); // flipped longitude to fix east/west
 
-      // orient cone outward
-      const up = new THREE.Vector3(0,1,0);
-      pinGroup.quaternion.setFromUnitVectors(up, dir);
-    }
+  // Direction vector
+  const dir = new THREE.Vector3(
+    Math.cos(lat) * Math.cos(lon),
+    Math.sin(lat),
+    Math.cos(lat) * Math.sin(lon)
+  ).normalize();
+
+  // Place exactly on surface (no lift)
+  pinGroup.position.copy(dir).multiplyScalar(rLocal);
+
+  // Orient cone outward from center
+  const up = new THREE.Vector3(0, 1, 0);
+  pinGroup.quaternion.setFromUnitVectors(up, dir);
+}
 
     function updatePin(){
       if (!earth) return;
