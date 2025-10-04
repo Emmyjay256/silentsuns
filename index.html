@@ -29,13 +29,8 @@
     .kbd{background:#222;border:1px solid #333;border-radius:4px;padding:1px 4px}
   </style>
 
-  <!-- Import map so "three" works in-browser -->
   <script type="importmap">
-  {
-    "imports": {
-      "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
-    }
-  }
+  { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
   </script>
 </head>
 <body>
@@ -67,20 +62,20 @@
     spectral_type: "K",          // K/M -> red.glb, G/F -> yellow.glb, A/B -> blue.glb
     period_days: 5.4321,         // orbital period
     t0_btjd: 134.5342,           // mid-transit reference (BTJD)
-    semi_major_axis_scene: 1.4,  // orbit radius in scene units (will be clamped against star size below)
-    planet_radius_scene: 0.25,   // planet draw radius (scene units)
-    star_radius_scene: 0.7       // star draw radius (scene units)
+    semi_major_axis_scene: 1.4,  // orbit radius in scene units
+    planet_radius_scene: 0.25,   // planet size (scene units)
+    star_radius_scene: 0.7       // star size (scene units)
   };
 
-  // Ensure orbit radius isn't too small vs star size (prevents collisions)
-  const MIN_ORBIT_MULT = 8; // try 8–10 for comfy spacing
+  // Enforce safe orbit spacing so it never intersects the star
+  const MIN_ORBIT_MULT = 8;
   if (received.semi_major_axis_scene < MIN_ORBIT_MULT * received.star_radius_scene) {
     console.warn('[viz] Orbit too tight; expanding to avoid overlap.');
     received.semi_major_axis_scene = MIN_ORBIT_MULT * received.star_radius_scene;
   }
 
-  // Simulation: how many *Earth days* advance per real second (visualization speed)
-  let SIM_SPEED_DAYS_PER_SEC = 1.25; // slower default so motion reads clearly
+  // Simulation speed (Earth days per real second)
+  let SIM_SPEED_DAYS_PER_SEC = 1.25;
   let paused = false;
 
   // -----------------------
@@ -127,7 +122,7 @@
   scene.add(key, fill, back, amb);
 
   // -----------------------
-  // Placeholders (show instantly while GLBs load)
+  // Placeholders (instant)
   // -----------------------
   const placeholderStarMat = new THREE.MeshStandardMaterial({
     color: 0xffcc66, emissive: 0xffaa33, emissiveIntensity: 0.6, roughness: 0.6, metalness: 0.0
@@ -144,12 +139,12 @@
   planetPH.name = 'planetPH';
   scene.add(planetPH);
 
-  // Label that follows the planet (elapsed Earth days)
+  // Label that follows the planet (ALWAYS above it → big offset)
   const lbl = document.createElement('div');
   lbl.className = 'label';
-  lbl.textContent = '0.0 d';
+  lbl.textContent = '0.00 d';
   const lblObj = new CSS2DObject(lbl);
-  lblObj.position.set(0, received.planet_radius_scene * 0.9, 0);
+  lblObj.position.set(0, received.planet_radius_scene * 1.6, 0); // ↑ increased to avoid covering the sphere
   planetPH.add(lblObj);
 
   smallEl.textContent = 'Placeholders visible… loading GLB models';
@@ -161,11 +156,11 @@
     const t = (s || '').toUpperCase();
     if (t.startsWith('K') || t.startsWith('M')) return './red.glb';
     if (t.startsWith('G') || t.startsWith('F')) return './yellow.glb';
-    return './blue.glb'; // default hot bucket for A/B/unknown
+    return './blue.glb'; // A/B/unknown
   }
 
   // -----------------------
-  // Loading manager (aggregate progress of both GLBs)
+  // Loading manager
   // -----------------------
   const manager = new THREE.LoadingManager();
   manager.onProgress = (url, loaded, total) => {
@@ -193,17 +188,12 @@
     sunPathForSpectral(received.spectral_type),
     (gltf)=>{
       starReal = gltf.scene;
-
-      // If your star model is around unit scale, setScalar(star_radius_scene) is fine.
-      // If it’s much smaller/larger, tweak this normalization factor.
       starReal.scale.setScalar(received.star_radius_scene);
-
       starReal.traverse(o=>{
         if (o.isMesh && o.material){
           o.material = o.material.clone();
           o.material.transparent = true;
           o.material.opacity = 0;
-          o.castShadow = false; o.receiveShadow = false;
         }
       });
       scene.add(starReal);
@@ -226,15 +216,14 @@
           o.material = o.material.clone();
           o.material.transparent = true;
           o.material.opacity = 0;
-          o.castShadow = false; o.receiveShadow = false;
         }
       });
       scene.add(planetReal);
 
-      // Move label from placeholder to the real planet
+      // Move label from placeholder to the real planet and keep the big offset
       if (lblObj.parent) lblObj.parent.remove(lblObj);
       planetReal.add(lblObj);
-      lblObj.position.set(0, received.planet_radius_scene * 0.9, 0);
+      lblObj.position.set(0, received.planet_radius_scene * 1.6, 0);
 
       smallEl.textContent = 'Planet model loaded…';
       reveal = Math.max(reveal, 0.001);
@@ -272,14 +261,15 @@
 
     const t = tMs * 0.001;
 
-    // placeholder pulse
-    const pulse = 0.6 + Math.sin(t*2.0)*0.08;
-    placeholderStarMat.emissiveIntensity = pulse;
+    // subtle star pulse (optional)
+    placeholderStarMat.emissiveIntensity = 0.6 + Math.sin(t*1.2)*0.04;
 
-    // spins
-    starPH.rotation.y   += 0.004;
+    // MUCH SLOWER star spin now
+    starPH.rotation.y   += 0.001;   // was 0.004
+    if (starReal)   starReal.rotation.y   += 0.001;  // was 0.005
+
+    // planet self-rotation unchanged (or tweak if you want)
     planetPH.rotation.y += 0.008;
-    if (starReal)   starReal.rotation.y   += 0.005;
     if (planetReal) planetReal.rotation.y += 0.01;
 
     // orbit (xz-plane)
@@ -291,7 +281,7 @@
     planetPH.position.set(x, y, z);
     if (planetReal) planetReal.position.set(x, y, z);
 
-    // label text
+    // label text (always above because of the big local Y offset)
     lbl.textContent = `${simDays.toFixed(2)} d`;
 
     // crossfade placeholders -> real; finish blur-down
