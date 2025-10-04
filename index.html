@@ -267,7 +267,7 @@
     }
     const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.0);
     const tubularSegments = Math.max(24, steps * 3);
-    const tubeRadius = Math.max(0.01, received.planet_radius_scene * 0.22); // thin, scale with planet size
+    const tubeRadius = Math.max(0.01, received.planet_radius_scene * 0.05); // thin, scale with planet size
     const radialSegments = 6;
 
     const geom = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, radialSegments, false);
