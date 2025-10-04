@@ -26,7 +26,7 @@
       box-shadow:0 6px 24px rgba(0,0,0,.35);
       overflow:hidden;
     }
-    .card + .card{ margin-top:18px; } /* (added) little gap between tiles */
+    .card + .card{ margin-top:18px; } /* little gap between tiles */
     .card-head{
       display:flex;align-items:center;justify-content:space-between;
       padding:10px 12px;border-bottom:1px solid #1a1d24;background:#0e1016;
@@ -76,6 +76,18 @@
     .sim-panel canvas{position:absolute;inset:0;z-index:0;display:block;filter:blur(10px)}
     .sim-panel .css2d{position:absolute;inset:0;pointer-events:none;z-index:1}
     #hud{ z-index:3; }
+
+    /* Earth calibration HUD (inside Earth panel, bottom-left) */
+    #calibHUD{
+      position:absolute;left:12px;bottom:12px;z-index:2;pointer-events:auto;
+      background:var(--glass);backdrop-filter:saturate(140%) blur(6px);
+      border:1px solid #1a1d24;border-radius:10px;padding:10px 12px;max-width:280px;
+      font-size:12px;line-height:1.35;color:#dfe9ff;
+    }
+    #calibHUD .row{display:flex;justify-content:space-between;gap:10px;margin-top:4px}
+    #calibHUD .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    #calibHUD .pill{display:inline-block;padding:2px 6px;border:1px solid #2a2e3a;border-radius:999px;background:#131721}
+    #copyBtn{margin-top:8px}
 
     /* Below content placeholder */
     .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:18px}
@@ -139,10 +151,21 @@
             <div class="bar"><div class="fill" id="earthFill"></div></div>
           </div>
         </div>
+
+        <!-- Calibration HUD -->
+        <div id="calibHUD" class="hidden">
+          <div><b>Calibration mode</b> <span class="pill">press C to toggle</span></div>
+          <div class="row"><span>Lat</span><span class="mono" id="latVal">0.000°</span></div>
+          <div class="row"><span>Lon</span><span class="mono" id="lonVal">0.000°</span></div>
+          <div class="small" style="margin-top:6px">
+            Arrows = move (±1°), Shift+Arrows = fine (±0.1°), R = reset, 1/2/3 = samples
+          </div>
+          <button id="copyBtn" class="btn" type="button">Copy lat/lon</button>
+        </div>
       </div>
     </div>
 
-    <!-- (Your notes grid stays) -->
+    <!-- Notes -->
     <div class="grid">
       <div class="note">Hook this to your backend payload. We’ll map <b>TIC</b>, <b>period</b>, <b>t0 (BTJD)</b>, and star type to the viz.</div>
       <div class="note">Add more sections here (model status, latest detections, controls, etc.).</div>
@@ -311,7 +334,7 @@
     requestAnimationFrame(animate);
     stepSim(tMs);
 
-    // star pulse + slow spin
+    // star pulse + slow spin (very slow)
     placeholderStarMat.emissiveIntensity = 0.6 + Math.sin(tMs*0.0012)*0.04;
     starPH.rotation.y += 0.001; if (starReal) starReal.rotation.y += 0.001;
 
@@ -338,7 +361,6 @@
       lastTheta = theta;
     }
     const orbitElapsed = simDays - orbitStartSimDays;
-    // HUD text as whole days (no decimals)
     daysText.textContent = `${Math.floor(orbitElapsed)} days`;
 
     // reveal real models
@@ -377,7 +399,7 @@
 
   setProgress(5);
 
-  /* ====================== EARTH VIEWER: isolated block (no changes above) ====================== */
+  /* ====================== EARTH VIEWER: with calibration mode ====================== */
   (function initEarthViewer(){
     const panel   = document.getElementById('earthPanel');
     const fsBtn   = document.getElementById('earthFsBtn');
@@ -385,7 +407,12 @@
     const fillEl  = document.getElementById('earthFill');
     const smallEl = document.getElementById('earthSmall');
 
-    // Local helpers
+    const calibHUD = document.getElementById('calibHUD');
+    const latValEl = document.getElementById('latVal');
+    const lonValEl = document.getElementById('lonVal');
+    const copyBtn  = document.getElementById('copyBtn');
+
+    // Helpers
     function setEarthProgress(p){
       const v = Math.max(0, Math.min(100, p));
       pctEl.textContent = v.toFixed(0) + '%';
@@ -451,19 +478,131 @@
         });
         scene.add(earth);
         smallEl.textContent = 'Earth loaded.';
+        // start with calibration ON
+        setCalibration(true);
       },
       undefined,
       (err)=> smallEl.textContent = 'Load error: ' + (err?.message || err)
     );
 
+    // ---------- Calibration state ----------
+    const CALIB = {
+      enabled: false,
+      lat: -1.0,         // start near Lake Victoria
+      lon: 33.0,
+      lastHoverIsEarth: false,
+      earthRadius: 1.0
+    };
+
+    // Pin geometry (cone + ring)
+    const pinGroup = new THREE.Group();
+    const pinMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.12, 16), pinMat);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.008, 8, 24), pinMat);
+    cone.position.y = 0.06; // lift cone above base
+    ring.rotation.x = Math.PI/2;
+    pinGroup.add(cone, ring);
+    pinGroup.visible = false;
+    scene.add(pinGroup);
+
+    function latLonToCartesian(latDeg, lonDeg, r){
+      const lat = THREE.MathUtils.degToRad(latDeg);
+      const lon = THREE.MathUtils.degToRad(lonDeg);
+      const x = r * Math.cos(lat) * Math.cos(lon);
+      const y = r * Math.sin(lat);
+      const z = r * Math.cos(lat) * Math.sin(lon);
+      return new THREE.Vector3(x,y,z);
+    }
+
+    function updatePin(){
+      if (!earth) return;
+      // get approximate earth radius from bounding sphere (once)
+      if (CALIB.earthRadius === 1.0){
+        const box = new THREE.Box3().setFromObject(earth);
+        const sphere = box.getBoundingSphere(new THREE.Sphere());
+        CALIB.earthRadius = sphere.radius;
+      }
+      const r = CALIB.earthRadius;
+      const pos = latLonToCartesian(CALIB.lat, CALIB.lon, r + 0.02);
+      pinGroup.position.copy(pos);
+
+      // orient the cone along the outward normal
+      const normal = pos.clone().normalize();
+      const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), normal);
+      pinGroup.setRotationFromQuaternion(quat);
+
+      // HUD text
+      latValEl.textContent = `${CALIB.lat.toFixed(3)}°`;
+      lonValEl.textContent = `${CALIB.lon.toFixed(3)}°`;
+    }
+
+    function setCalibration(on){
+      CALIB.enabled = on;
+      pinGroup.visible = on;
+      calibHUD.classList.toggle('hidden', !on);
+      smallEl.textContent = on ? 'Calibration: ON (use arrows, Shift for fine)' : 'Calibration: OFF';
+    }
+
     // Animate
+    let rotateEarth = true;
     function animate(){
       requestAnimationFrame(animate);
-      if (earth) earth.rotation.y += 0.0018;
+      if (earth){
+        if (rotateEarth && !CALIB.enabled) earth.rotation.y += 0.0018;
+      }
+      if (CALIB.enabled) updatePin();
       controls.update();
       renderer.render(scene, camera);
     }
     animate();
+
+    // Focus handling (so arrows affect Earth only when hovered)
+    panel.addEventListener('pointerenter', ()=> CALIB.lastHoverIsEarth = true);
+    panel.addEventListener('pointerleave', ()=> CALIB.lastHoverIsEarth = false);
+
+    // Keyboard calibration controls
+    window.addEventListener('keydown', (e)=>{
+      if (!CALIB.lastHoverIsEarth) return; // only when mouse over Earth panel
+
+      const big = !e.shiftKey ? 1.0 : 0.1;   // 1° or 0.1° steps
+      if (e.key === 'c' || e.key === 'C'){
+        setCalibration(!CALIB.enabled);
+        rotateEarth = !CALIB.enabled; // stop rotation while calibrating
+      } else if (!CALIB.enabled){
+        return;
+      } else if (e.key === 'ArrowUp'){
+        CALIB.lat = Math.min(90, CALIB.lat + big);
+      } else if (e.key === 'ArrowDown'){
+        CALIB.lat = Math.max(-90, CALIB.lat - big);
+      } else if (e.key === 'ArrowRight'){
+        CALIB.lon = (CALIB.lon + big + 540) % 360 - 180; // keep in [-180,180)
+      } else if (e.key === 'ArrowLeft'){
+        CALIB.lon = (CALIB.lon - big + 540) % 360 - 180;
+      } else if (e.key === 'r' || e.key === 'R'){
+        CALIB.lat = 0; CALIB.lon = 0;
+      } else if (e.key === '1'){
+        CALIB.lat = -1.0; CALIB.lon = 33.0;           // Lake Victoria
+      } else if (e.key === '2'){
+        CALIB.lat = 30.044; CALIB.lon = 31.235;       // Cairo
+      } else if (e.key === '3'){
+        CALIB.lat = -33.925; CALIB.lon = 18.424;      // Cape Town
+      } else { return; }
+      e.preventDefault();
+      updatePin();
+    });
+
+    // Copy button
+    copyBtn.addEventListener('click', async ()=>{
+      const payload = JSON.stringify({ lat: Number(CALIB.lat.toFixed(6)), lon: Number(CALIB.lon.toFixed(6)) });
+      try {
+        await navigator.clipboard.writeText(payload);
+        copyBtn.textContent = 'Copied!';
+        setTimeout(()=> copyBtn.textContent = 'Copy lat/lon', 900);
+      } catch {
+        copyBtn.textContent = 'Copy failed';
+        setTimeout(()=> copyBtn.textContent = 'Copy lat/lon', 900);
+      }
+    });
 
     // Resize & fullscreen (only for this panel)
     const onResize = ()=> sizeEarthToPanel(camera, renderer);
