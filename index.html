@@ -12,16 +12,10 @@
     html,body{height:100%}
     body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,Segoe UI,Roboto,Inter,Arial}
     a{color:#9cf}
-
-    /* utility */
-    .hidden{display:none}
-
-    /* Page layout */
     .wrap{max-width:1100px;margin:0 auto;padding:28px 16px 64px}
     h1{font-size:38px;line-height:1.1;margin:0 0 8px}
     .lead{color:var(--muted);margin:0 0 20px}
 
-    /* Sim card */
     .card{
       background:var(--card);
       border:1px solid #1a1d24;
@@ -29,7 +23,7 @@
       box-shadow:0 6px 24px rgba(0,0,0,.35);
       overflow:hidden;
     }
-    .card + .card{ margin-top:18px; } /* little gap between tiles */
+    .card + .card{ margin-top:18px; }
     .card-head{
       display:flex;align-items:center;justify-content:space-between;
       padding:10px 12px;border-bottom:1px solid #1a1d24;background:#0e1016;
@@ -43,12 +37,10 @@
     .btn:hover{background:#0f1420}
     .hint{font-size:12px;color:#9fb0c8}
 
-    /* Sim panel */
     .sim-panel{
       position:relative;width:100%;height:60vh;min-height:380px;background:#0a0c11;
     }
 
-    /* Loading overlay */
     .overlay{
       position:absolute;inset:0;pointer-events:none;display:flex;align-items:flex-start;justify-content:center
     }
@@ -61,46 +53,23 @@
     .small{opacity:.85;font-size:11px;color:#ddd}
     .kbd{background:#222;border:1px solid #333;border-radius:4px;padding:1px 4px}
 
-    /* Days HUD (top-right) */
     #daysHUD{
       position:absolute;top:12px;right:12px;pointer-events:none;
       z-index:2;text-align:right;
     }
-    #daysHUD .title{
-      font-weight:700;font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:#a9cfe0;
-    }
-    #daysHUD .value{
-      margin-top:2px;
-      font-weight:900;font-size:32px;line-height:1;color:var(--accent);
-      text-shadow:0 0 10px rgba(0,229,255,.35);
-    }
+    #daysHUD .title{font-weight:700;font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:#a9cfe0;}
+    #daysHUD .value{margin-top:2px;font-weight:900;font-size:32px;line-height:1;color:var(--accent);text-shadow:0 0 10px rgba(0,229,255,.35);}
 
-    /* Layering */
     .sim-panel canvas{position:absolute;inset:0;z-index:0;display:block;filter:blur(10px)}
     .sim-panel .css2d{position:absolute;inset:0;pointer-events:none;z-index:1}
     #hud{ z-index:3; }
 
-    /* Earth calibration HUD (inside Earth panel, bottom-left) */
-    #calibHUD{
-      position:absolute;left:12px;bottom:12px;z-index:2;pointer-events:auto;
-      background:var(--glass);backdrop-filter:saturate(140%) blur(6px);
-      border:1px solid #1a1d24;border-radius:10px;padding:10px 12px;max-width:280px;
-      font-size:12px;line-height:1.35;color:#dfe9ff;
-    }
-    #calibHUD .row{display:flex;justify-content:space-between;gap:10px;margin-top:4px}
-    #calibHUD .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-    #calibHUD .pill{display:inline-block;padding:2px 6px;border:1px solid #2a2e3a;border-radius:999px;background:#131721}
-    #copyBtn{margin-top:8px}
-
-    /* Below content placeholder */
     .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:18px}
     .note{background:#0e1016;border:1px solid #1a1d24;border-radius:12px;padding:14px;color:#cfe2ff}
   </style>
 
   <script type="importmap">
-  {
-    "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" }
-  }
+  { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
   </script>
 </head>
 <body>
@@ -108,7 +77,7 @@
     <h1>Silent Planets</h1>
     <p class="lead">TESS transit candidates rendered as orbits. Choose Fullscreen when you’re ready to present.</p>
 
-    <!-- ====================== EXISTING TILE (unchanged) ====================== -->
+    <!-- ====================== ORBIT SIM TILE (unchanged) ====================== -->
     <div class="card">
       <div class="card-head">
         <h2>Orbit Simulation</h2>
@@ -127,7 +96,6 @@
           </div>
         </div>
 
-        <!-- Top-right days HUD -->
         <div id="daysHUD">
           <div class="title">Elapsed earth days</div>
           <div class="value" id="daysText">0 days</div>
@@ -135,18 +103,16 @@
       </div>
     </div>
 
-    <!-- ====================== NEW TILE: Earth Viewer ====================== -->
+    <!-- ====================== EARTH VIEWER ====================== -->
     <div class="card">
       <div class="card-head">
-        <h2>Earth Viewer (Preview)</h2>
+        <h2>Earth Viewer</h2>
         <div class="right">
-          <span class="hint">GLB: <code>earth.glb</code> in this folder</span>
+          <span class="hint">GLB: <code>earth.glb</code></span>
           <button id="earthFsBtn" class="btn" type="button">Enter Fullscreen</button>
         </div>
       </div>
-
       <div id="earthPanel" class="sim-panel">
-        <!-- Progress HUD for Earth -->
         <div class="overlay" id="earthHud">
           <div class="panel">
             <div><b>Loading Earth…</b> <span id="earthPct">0%</span></div>
@@ -154,21 +120,9 @@
             <div class="bar"><div class="fill" id="earthFill"></div></div>
           </div>
         </div>
-
-        <!-- Calibration HUD -->
-        <div id="calibHUD" class="hidden">
-          <div><b>Calibration mode</b> <span class="pill">press C to toggle</span></div>
-          <div class="row"><span>Lat</span><span class="mono" id="latVal">0.000°</span></div>
-          <div class="row"><span>Lon</span><span class="mono" id="lonVal">0.000°</span></div>
-          <div class="small" style="margin-top:6px">
-            Arrows = move (±1°), Shift+Arrows = fine (±0.1°), R = reset, 1/2/3 = samples
-          </div>
-          <button id="copyBtn" class="btn" type="button">Copy lat/lon</button>
-        </div>
       </div>
     </div>
 
-    <!-- Notes -->
     <div class="grid">
       <div class="note">Hook this to your backend payload. We’ll map <b>TIC</b>, <b>period</b>, <b>t0 (BTJD)</b>, and star type to the viz.</div>
       <div class="note">Add more sections here (model status, latest detections, controls, etc.).</div>
@@ -181,26 +135,15 @@
   import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
   import { CSS2DRenderer } from 'https://unpkg.com/three@0.160.0/examples/jsm/renderers/CSS2DRenderer.js';
 
-  // -------- Hard-coded demo data --------
-  const received = {
-    tic: 261136679,
-    spectral_type: "A",          // K/M -> red.glb, G/F -> yellow.glb, A/B -> blue.glb
-    period_days: 5.4321,
-    t0_btjd: 134.5342,
-    semi_major_axis_scene: 1.4,
-    planet_radius_scene: 0.25,
-    star_radius_scene: 0.7
-  };
-
+  /* ====================== ORBIT SIM (unchanged) ====================== */
+  const received = { tic:261136679, spectral_type:"A", period_days:5.4321, t0_btjd:134.5342, semi_major_axis_scene:1.4, planet_radius_scene:0.25, star_radius_scene:0.7 };
   const MIN_ORBIT_MULT = 8;
   if (received.semi_major_axis_scene < MIN_ORBIT_MULT * received.star_radius_scene) {
     received.semi_major_axis_scene = MIN_ORBIT_MULT * received.star_radius_scene;
   }
-
   let SIM_SPEED_DAYS_PER_SEC = 1.0;
   let paused = false;
 
-  // DOM
   const simPanel = document.getElementById('sim');
   const fsBtn = document.getElementById('fsBtn');
   const pctEl = document.getElementById('pct');
@@ -209,7 +152,6 @@
   const daysText = document.getElementById('daysText');
   const setProgress = (p)=>{ const v=Math.max(0,Math.min(100,p)); pctEl.textContent = v.toFixed(0)+'%'; fillEl.style.width = v+'%'; };
 
-  // Scene / renderers
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0b0b0b);
 
@@ -239,14 +181,12 @@
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
 
-  // Lights
   const key   = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set( 5, 5,  5);
   const fill  = new THREE.DirectionalLight(0xffffff, 0.55); fill.position.set(-5, 2,  5);
   const back  = new THREE.DirectionalLight(0xffffff, 0.75); back.position.set( 0, 5, -6);
   const amb   = new THREE.AmbientLight(0xffffff, 0.2);
   scene.add(key, fill, back, amb);
 
-  // Placeholders
   const placeholderStarMat = new THREE.MeshStandardMaterial({
     color: 0xffcc66, emissive: 0xffaa33, emissiveIntensity: 0.6, roughness: 0.6, metalness: 0.0
   });
@@ -260,9 +200,6 @@
   planetPH.position.set(received.semi_major_axis_scene, 0, 0);
   scene.add(planetPH);
 
-  smallEl.textContent = 'Placeholders visible… loading GLB models';
-
-  // Sun by spectral type
   function sunPathForSpectral(s) {
     const t = (s || '').toUpperCase();
     if (t.startsWith('K') || t.startsWith('M')) return './red.glb';
@@ -270,16 +207,14 @@
     return './blue.glb';
   }
 
-  // Loading manager + blur
   const manager = new THREE.LoadingManager();
   manager.onProgress = (_u, loaded, total)=>{ const p=total?(loaded/total)*100:50; setProgress(p); applyBlur(10*(1-p/100)); };
   manager.onLoad = ()=> setProgress(100);
 
-  const loader = new GLTFLoader(manager);
   let currentBlur = 10;
   function applyBlur(px){ renderer.domElement.style.filter = `blur(${px}px)`; }
 
-  // Load GLBs
+  const loader = new GLTFLoader(manager);
   let starReal = null, planetReal = null, reveal = 0;
 
   loader.load(sunPathForSpectral(received.spectral_type), (gltf)=>{
@@ -301,7 +236,6 @@
     reveal = Math.max(reveal, 0.001);
   });
 
-  // Progress tube (growing arc)
   const TUBE_COLOR = 0x00e5ff;
   const tubeMaterial = new THREE.MeshBasicMaterial({ color: TUBE_COLOR, transparent: true, opacity: 0.95 });
   let progressMesh = null, arcStartTheta = null, lastTheta = null, orbitStartSimDays = 0;
@@ -323,7 +257,6 @@
     else { progressMesh.geometry.dispose(); progressMesh.geometry = geom; }
   }
 
-  // Sim time & orbit
   let simDays = 0, lastT = performance.now();
   function stepSim(nowMs){ const dt=(nowMs-lastT)/1000; lastT=nowMs; if(!paused) simDays += dt * SIM_SPEED_DAYS_PER_SEC; }
   const PI2 = Math.PI * 2;
@@ -332,41 +265,29 @@
   }
   const currentBTJD = ()=> received.t0_btjd + simDays;
 
-  // Animate
-  function animate(tMs){
-    requestAnimationFrame(animate);
+  function animateOrbit(tMs){
+    requestAnimationFrame(animateOrbit);
     stepSim(tMs);
-
-    // star pulse + slow spin (very slow)
     placeholderStarMat.emissiveIntensity = 0.6 + Math.sin(tMs*0.0012)*0.04;
     starPH.rotation.y += 0.001; if (starReal) starReal.rotation.y += 0.001;
-
-    // planet self-rotation
     planetPH.rotation.y += 0.008; if (planetReal) planetReal.rotation.y += 0.01;
 
-    // orbit path
     const R = received.semi_major_axis_scene;
     const theta = orbitAngle(received.period_days, received.t0_btjd, currentBTJD());
     const x = Math.cos(theta) * R, z = Math.sin(theta) * R;
     planetPH.position.set(x, 0, z); if (planetReal) planetReal.position.set(x, 0, z);
 
-    // progress arc + elapsed (reset on wrap)
     if (arcStartTheta === null) {
       arcStartTheta = theta; lastTheta = theta; orbitStartSimDays = simDays;
       updateProgressArc(R, arcStartTheta, theta + 1e-6);
     } else {
-      if (theta < lastTheta) { // wrapped
-        arcStartTheta = theta; orbitStartSimDays = simDays;
-        updateProgressArc(R, arcStartTheta, theta + 1e-6);
-      } else {
-        updateProgressArc(R, arcStartTheta, theta);
-      }
+      if (theta < lastTheta) { arcStartTheta = theta; orbitStartSimDays = simDays; updateProgressArc(R, arcStartTheta, theta + 1e-6); }
+      else { updateProgressArc(R, arcStartTheta, theta); }
       lastTheta = theta;
     }
     const orbitElapsed = simDays - orbitStartSimDays;
     daysText.textContent = `${Math.floor(orbitElapsed)} days`;
 
-    // reveal real models
     if (reveal > 0 && starReal && planetReal){
       reveal = Math.min(1, reveal + 0.03);
       const realOpacity = reveal;
@@ -382,27 +303,24 @@
     labelRenderer.render(scene, camera);
   }
   applyBlur(currentBlur);
-  animate(0);
+  animateOrbit(0);
 
-  // Resize & fullscreen
   addEventListener('resize', sizeToPanel);
   document.addEventListener('fullscreenchange', sizeToPanel);
-  document.getElementById('fsBtn').addEventListener('click', async ()=>{
+  fsBtn.addEventListener('click', async ()=>{
     if (!document.fullscreenElement){ await simPanel.requestFullscreen(); fsBtn.textContent='Exit Fullscreen'; }
     else { await document.exitFullscreen(); fsBtn.textContent='Enter Fullscreen'; }
     sizeToPanel();
   });
 
-  // Keys
   addEventListener('keydown', (e)=>{
     if (e.key === '[') { SIM_SPEED_DAYS_PER_SEC = Math.max(0.01, SIM_SPEED_DAYS_PER_SEC / 1.5); smallEl.textContent = `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s (slower)`; }
     else if (e.key === ']') { SIM_SPEED_DAYS_PER_SEC = Math.min(1e3, SIM_SPEED_DAYS_PER_SEC * 1.5); smallEl.textContent = `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s (faster)`; }
     else if (e.code === 'Space') { paused = !paused; smallEl.textContent = paused ? 'Paused' : `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s`; }
   });
-
   setProgress(5);
 
-  /* ====================== EARTH VIEWER: with calibration mode ====================== */
+  /* ====================== EARTH VIEWER (final, no calibration) ====================== */
   (function initEarthViewer(){
     const panel   = document.getElementById('earthPanel');
     const fsBtn   = document.getElementById('earthFsBtn');
@@ -410,12 +328,6 @@
     const fillEl  = document.getElementById('earthFill');
     const smallEl = document.getElementById('earthSmall');
 
-    const calibHUD = document.getElementById('calibHUD');
-    const latValEl = document.getElementById('latVal');
-    const lonValEl = document.getElementById('lonVal');
-    const copyBtn  = document.getElementById('copyBtn');
-
-    // Helpers
     function setEarthProgress(p){
       const v = Math.max(0, Math.min(100, p));
       pctEl.textContent = v.toFixed(0) + '%';
@@ -427,7 +339,6 @@
       renderer.setSize(w, h, false);
     }
 
-    // Scene
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0b0b0b);
 
@@ -443,198 +354,110 @@
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
 
-    // Lights
     const amb  = new THREE.AmbientLight(0xffffff, 0.35);
     const key  = new THREE.DirectionalLight(0xffffff, 1.1); key.position.set( 5, 4,  6);
     const rim  = new THREE.DirectionalLight(0x99b7ff, 0.6); rim.position.set(-6, 2, -4);
     const hemi = new THREE.HemisphereLight(0x668cff, 0x0a0c11, 0.3);
     scene.add(amb, key, rim, hemi);
 
-    // Progress / blur
     function applyEarthBlur(px){ renderer.domElement.style.filter = `blur(${px}px)`; }
     let blur = 10; applyEarthBlur(blur);
 
     const manager = new THREE.LoadingManager();
-    manager.onProgress = (_url, loaded, total)=>{
-      const p = total ? (loaded/total)*100 : 50;
-      setEarthProgress(p);
-      blur = 10 * (1 - p/100);
-      applyEarthBlur(blur);
-    };
-    manager.onLoad = ()=>{
-      setEarthProgress(100);
-      applyEarthBlur(0);
-      document.getElementById('earthHud').style.display = 'none';
-    };
+    manager.onProgress = (_url, loaded, total)=>{ const p = total ? (loaded/total)*100 : 50; setEarthProgress(p); blur = 10 * (1 - p/100); applyEarthBlur(blur); };
+    manager.onLoad = ()=>{ setEarthProgress(100); applyEarthBlur(0); document.getElementById('earthHud').style.display = 'none'; };
 
-    // Load earth.glb
     const loader = new GLTFLoader(manager);
     let earth = null, earthCore = null;
-    loader.load(
-      './earth.glb',
-      (gltf)=>{
-        earth = gltf.scene;
 
-        // find biggest mesh as "core"
-        earth.traverse(o=>{
-          if (o.isMesh) {
-            o.material = o.material.clone();
-            if (!earthCore) earthCore = o;
-            else {
-              const a = earthCore.geometry?.boundingSphere?.radius || 0;
-              const b = o.geometry?.boundingSphere?.radius || 0;
-              if (b > a) earthCore = o;
-            }
-          }
-        });
-        if (earthCore && !earthCore.geometry.boundingSphere) {
-          earthCore.geometry.computeBoundingSphere();
-        }
-        scene.add(earth);
-        smallEl.textContent = 'Earth loaded.';
+    // Shared pin assets (one human blue)
+    const PIN_MAT = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
+    const PIN_CONE = new THREE.ConeGeometry(0.03, 0.12, 16);
+    const PIN_RING = new THREE.TorusGeometry(0.045, 0.008, 8, 24);
+    // Slight polygon offset on ring to avoid z-fighting while still "touching" surface
+    PIN_MAT.polygonOffset = true; PIN_MAT.polygonOffsetFactor = -1; PIN_MAT.polygonOffsetUnits = -1;
 
-        // start with calibration ON
-        setCalibration(true);
-        updatePin(); // place initial pin
-      },
-      undefined,
-      (err)=> smallEl.textContent = 'Load error: ' + (err?.message || err)
-    );
+    // Active pins store (so we can clear per-star)
+    let activePins = [];
 
-    // ---------- Calibration state ----------
-    const CALIB = {
-      enabled: false,
-      lat: -1.0,   // Lake Victoria-ish
-      lon: 33.0,
-      earthRadiusLocal: 1.0
-    };
+    function createPin(){
+      const g = new THREE.Group();
+      const cone = new THREE.Mesh(PIN_CONE, PIN_MAT);
+      const ring = new THREE.Mesh(PIN_RING, PIN_MAT);
+      cone.position.y = 0.06;
+      ring.rotation.x = Math.PI/2;
+      g.add(cone, ring);
+      return g;
+    }
 
-    // Pin geometry (cone + ring), make it a CHILD OF EARTH so it follows transforms
-    const pinGroup = new THREE.Group();
-    const pinMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.12, 16), pinMat);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.008, 8, 24), pinMat);
-    cone.position.y = 0.06; // lift cone above base
-    ring.rotation.x = Math.PI/2;
-    pinGroup.add(cone, ring);
-    pinGroup.visible = false;
+    // Earth radius in local units. Your GLB uses R = 1.0, so return 1.
+    function getEarthRadiusLocal(){ return 1.0; }
 
-    /*function computeEarthRadiusLocal(){
-      if (!earth || !earthCore) return 1.0;
-      if (!earthCore.geometry.boundingSphere) earthCore.geometry.computeBoundingSphere();
-      const bs = earthCore.geometry.boundingSphere;
-      const s = new THREE.Vector3(); earthCore.getWorldScale(s);
-      // assume uniform scaling; use x
-      return bs.radius * s.x;
-    }*/
-
-    function computeEarthRadiusLocal(){
-  return 1.0; // force Earth radius to 1 meter unit for calibration
-}
-
+    // Final mapping (uses flipped longitude so ArrowRight moves visually right/east)
     function latLonToLocal(latDeg, lonDeg, rLocal){
-  // Convert to radians
-  const lat = THREE.MathUtils.degToRad(latDeg);
-  const lon = THREE.MathUtils.degToRad(-lonDeg); // flipped longitude to fix east/west
+      const lat = THREE.MathUtils.degToRad(latDeg);
+      const lon = THREE.MathUtils.degToRad(-lonDeg); // flip
+      const dir = new THREE.Vector3(
+        Math.cos(lat) * Math.cos(lon),
+        Math.sin(lat),
+        Math.cos(lat) * Math.sin(lon)
+      ).normalize();
+      return dir.multiplyScalar(rLocal); // exactly on surface (no lift)
+    }
 
-  // Direction vector
-  const dir = new THREE.Vector3(
-    Math.cos(lat) * Math.cos(lon),
-    Math.sin(lat),
-    Math.cos(lat) * Math.sin(lon)
-  ).normalize();
-
-  // Place exactly on surface (no lift)
-  pinGroup.position.copy(dir).multiplyScalar(rLocal);
-
-  // Orient cone outward from center
-  const up = new THREE.Vector3(0, 1, 0);
-  pinGroup.quaternion.setFromUnitVectors(up, dir);
-}
-
-    function updatePin(){
+    // Public: placeRegionPins(regions) — clears old pins, drops new ones
+    function placeRegionPins(regions){
       if (!earth) return;
-      if (!earth.children.includes(pinGroup)) earth.add(pinGroup);
-
-      // recompute (handles any GLB scale)
-      CALIB.earthRadiusLocal = computeEarthRadiusLocal();
-
-      latLonToLocal(CALIB.lat, CALIB.lon, CALIB.earthRadiusLocal);
-      latValEl.textContent = `${CALIB.lat.toFixed(3)}°`;
-      lonValEl.textContent = `${CALIB.lon.toFixed(3)}°`;
-    }
-
-    function setCalibration(on){
-      CALIB.enabled = on;
-      pinGroup.visible = on;
-      calibHUD.classList.toggle('hidden', !on);
-      if (on && earth && !earth.children.includes(pinGroup)) {
-        earth.add(pinGroup);
+      // clear previous
+      for (const p of activePins){
+        earth.remove(p);
+        p.traverse(o=>{ if (o.isMesh) { /* keep shared geo/material; nothing to dispose */ } });
       }
-      smallEl.textContent = on ? 'Calibration: ON (use arrows, Shift for fine)' : 'Calibration: OFF';
-    }
+      activePins = [];
 
-    // Animate (stop auto-rotation when calibrating)
-    let rotateEarth = true;
+      const r = getEarthRadiusLocal();
+      for (const bundle of regions){
+        for (const coord of bundle){
+          const { lat, lon } = coord;
+          const pin = createPin();
+          const pos = latLonToLocal(lat, lon, r);
+          pin.position.copy(pos);
+          pin.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), pos.clone().normalize());
+          earth.add(pin);
+          activePins.push(pin);
+        }
+      }
+    }
+    // expose for your backend
+    window.placeRegionPins = placeRegionPins;
+
+    loader.load('./earth.glb', (gltf)=>{
+      earth = gltf.scene;
+      earth.traverse(o=>{
+        if (o.isMesh) {
+          o.material = o.material.clone();
+          if (!earthCore) earthCore = o;
+          else{
+            const a = earthCore.geometry?.boundingSphere?.radius || 0;
+            const b = o.geometry?.boundingSphere?.radius || 0;
+            if (b > a) earthCore = o;
+          }
+        }
+      });
+      if (earthCore && !earthCore.geometry.boundingSphere) earthCore.geometry.computeBoundingSphere();
+      scene.add(earth);
+      smallEl.textContent = 'Earth loaded.';
+    }, undefined, (err)=> smallEl.textContent = 'Load error: ' + (err?.message || err));
+
+    // Simple rotation (presentation mode)
     function animate(){
       requestAnimationFrame(animate);
-      if (earth && rotateEarth && !CALIB.enabled) earth.rotation.y += 0.0018;
-      if (CALIB.enabled) updatePin();
+      if (earth) earth.rotation.y += 0.0018;
       controls.update();
       renderer.render(scene, camera);
     }
     animate();
 
-    // Hover gating (so arrow keys only affect Earth panel when cursor is over it)
-    let hover = false;
-    panel.addEventListener('pointerenter', ()=> hover = true);
-    panel.addEventListener('pointerleave', ()=> hover = false);
-
-    // Keyboard calibration controls
-    window.addEventListener('keydown', (e)=>{
-      if (!hover) return; // only when cursor is over Earth panel
-
-      const step = e.shiftKey ? 0.1 : 1.0;   // fine vs coarse
-      if (e.key === 'c' || e.key === 'C'){
-        setCalibration(!CALIB.enabled);
-        rotateEarth = !CALIB.enabled;
-      } else if (!CALIB.enabled){
-        return;
-      } else if (e.key === 'ArrowUp'){
-        CALIB.lat = Math.min(90, CALIB.lat + step);
-      } else if (e.key === 'ArrowDown'){
-        CALIB.lat = Math.max(-90, CALIB.lat - step);
-      } else if (e.key === 'ArrowRight'){
-        CALIB.lon = (CALIB.lon + step + 540) % 360 - 180;
-      } else if (e.key === 'ArrowLeft'){
-        CALIB.lon = (CALIB.lon - step + 540) % 360 - 180;
-      } else if (e.key === 'r' || e.key === 'R'){
-        CALIB.lat = 0; CALIB.lon = 0;
-      } else if (e.key === '1'){
-        CALIB.lat = -1.0; CALIB.lon = 33.0;         // Lake Victoria
-      } else if (e.key === '2'){
-        CALIB.lat = 30.044; CALIB.lon = 31.235;     // Cairo
-      } else if (e.key === '3'){
-        CALIB.lat = -33.925; CALIB.lon = 18.424;    // Cape Town
-      } else { return; }
-      e.preventDefault();
-      updatePin();
-    });
-
-    // Copy button
-    copyBtn.addEventListener('click', async ()=>{
-      const payload = JSON.stringify({ lat: Number(CALIB.lat.toFixed(6)), lon: Number(CALIB.lon.toFixed(6)) });
-      try {
-        await navigator.clipboard.writeText(payload);
-        copyBtn.textContent = 'Copied!';
-        setTimeout(()=> copyBtn.textContent = 'Copy lat/lon', 900);
-      } catch {
-        copyBtn.textContent = 'Copy failed';
-        setTimeout(()=> copyBtn.textContent = 'Copy lat/lon', 900);
-      }
-    });
-
-    // Resize & fullscreen (only for this panel)
     const onResize = ()=> sizeEarthToPanel(camera, renderer);
     addEventListener('resize', onResize);
     document.addEventListener('fullscreenchange', onResize);
@@ -643,6 +466,15 @@
       else { await document.exitFullscreen(); fsBtn.textContent='Enter Fullscreen'; }
       sizeEarthToPanel(camera, renderer);
     });
+
+    // --- DEMO CALL (remove or replace) ---
+    setTimeout(()=>{
+       placeRegionPins([
+         [ {lat:-1, lon:33}, {lat:0, lon:32.7}, {lat:1, lon:33.2} ],          // bundle 1
+         [ {lat:30.044, lon:31.235}, {lat:29.95, lon:31.4} ]                  // bundle 2
+       ]);
+  / }, 1200);
+      // demo call ends here 
   })();
 </script>
 </body>
