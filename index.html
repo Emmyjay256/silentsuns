@@ -447,6 +447,16 @@
       if (earthCore && !earthCore.geometry.boundingSphere) earthCore.geometry.computeBoundingSphere();
       scene.add(earth);
       smallEl.textContent = 'Earth loaded.';
+//demo pins
+
+       placeRegionPins([
+         [ {lat:-1, lon:33}, {lat:0, lon:32.7}, {lat:1, lon:33.2} ],          // bundle 1
+         [ {lat:30.044, lon:31.235}, {lat:29.95, lon:31.4} ]                  // bundle 2
+       ]);
+
+      // end demo
+
+      
     }, undefined, (err)=> smallEl.textContent = 'Load error: ' + (err?.message || err));
 
     // Simple rotation (presentation mode)
@@ -469,10 +479,7 @@
 
     // --- DEMO CALL (remove or replace) ---
     setTimeout(()=>{
-       placeRegionPins([
-         [ {lat:-1, lon:33}, {lat:0, lon:32.7}, {lat:1, lon:33.2} ],          // bundle 1
-         [ {lat:30.044, lon:31.235}, {lat:29.95, lon:31.4} ]                  // bundle 2
-       ]);
+      
    }, 1200);
       // demo call ends here 
   })();
