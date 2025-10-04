@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>TESS Orbit Viz — Sun Selector + Planet Orbit</title>
+  <title>TESS Orbit Viz — Progress Arc + Days Counter</title>
   <style>
     html,body{height:100%}
     body{margin:0;overflow:hidden;background:#0b0b0b;color:#fff;font-family:system-ui}
@@ -11,7 +11,7 @@
     /* HUD */
     #hud{position:absolute;inset:0;pointer-events:none;display:flex;align-items:flex-start;justify-content:center}
     #panel{margin-top:14px;background:rgba(0,0,0,.55);backdrop-filter:saturate(140%) blur(6px);
-           border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.4;max-width:460px}
+           border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.4;max-width:520px}
     #bar{height:4px;background:rgba(255,255,255,.15);border-radius:2px;overflow:hidden;margin-top:6px}
     #fill{height:100%;width:0%;background:linear-gradient(90deg,#9cf,#9f9);transition:width .15s ease}
     #small{opacity:.85;font-size:11px;color:#ddd}
@@ -20,13 +20,21 @@
     canvas{display:block;filter:blur(10px)}
     .hidden{display:none}
 
-    /* CSS2D label */
+    /* CSS2D label (above planet) */
     .label{
       padding:4px 6px;border-radius:6px;background:rgba(0,0,0,.55);
       font:600 12px/1.2 system-ui, sans-serif;color:#fff;pointer-events:none;
       transform:translate(-50%,-120%);white-space:nowrap
     }
     .kbd{background:#222;border:1px solid #333;border-radius:4px;padding:1px 4px}
+
+    /* Big corner days counter (same color as tube) */
+    #daysHUD{
+      position:absolute;top:14px;right:16px;pointer-events:none;
+      font-weight:800;font-size:28px;line-height:1;color:#00e5ff;
+      text-shadow:0 0 10px rgba(0,229,255,.35);
+    }
+    #daysHUD small{font-weight:600;font-size:12px;opacity:.8;display:block}
   </style>
 
   <script type="importmap">
@@ -47,6 +55,7 @@
     <div id="bar"><div id="fill"></div></div>
   </div>
 </div>
+<div id="daysHUD"><small>elapsed (per orbit)</small><span id="daysText">0.00 d</span></div>
 
 <script type="module">
   import * as THREE from 'three';
@@ -62,7 +71,7 @@
     spectral_type: "K",          // K/M -> red.glb, G/F -> yellow.glb, A/B -> blue.glb
     period_days: 5.4321,         // orbital period
     t0_btjd: 134.5342,           // mid-transit reference (BTJD)
-    semi_major_axis_scene: 1.4,  // orbit radius in scene units
+    semi_major_axis_scene: 1.4,  // orbit radius in scene units (will be clamped)
     planet_radius_scene: 0.25,   // planet size (scene units)
     star_radius_scene: 0.7       // star size (scene units)
   };
@@ -75,7 +84,7 @@
   }
 
   // Simulation speed (Earth days per real second)
-  let SIM_SPEED_DAYS_PER_SEC = 1.25;
+  let SIM_SPEED_DAYS_PER_SEC = 1.0;  // calm default
   let paused = false;
 
   // -----------------------
@@ -85,6 +94,7 @@
   const fillEl = document.getElementById('fill');
   const smallEl = document.getElementById('small');
   const panelEl = document.getElementById('panel');
+  const daysText = document.getElementById('daysText');
   const setProgress = (p)=>{ const v=Math.max(0,Math.min(100,p)); pctEl.textContent = v.toFixed(0)+'%'; fillEl.style.width = v+'%'; };
 
   // -----------------------
@@ -144,7 +154,7 @@
   lbl.className = 'label';
   lbl.textContent = '0.00 d';
   const lblObj = new CSS2DObject(lbl);
-  lblObj.position.set(0, received.planet_radius_scene * 1.6, 0); // ↑ increased to avoid covering the sphere
+  lblObj.position.set(0, received.planet_radius_scene * 1.6, 0);
   planetPH.add(lblObj);
 
   smallEl.textContent = 'Placeholders visible… loading GLB models';
@@ -220,7 +230,7 @@
       });
       scene.add(planetReal);
 
-      // Move label from placeholder to the real planet and keep the big offset
+      // Move label from placeholder to the real planet (keep offset)
       if (lblObj.parent) lblObj.parent.remove(lblObj);
       planetReal.add(lblObj);
       lblObj.position.set(0, received.planet_radius_scene * 1.6, 0);
@@ -231,6 +241,46 @@
     undefined,
     (err)=> smallEl.textContent = 'Planet load error: '+(err?.message||err)
   );
+
+  // -----------------------
+  // Progress Tube (growing orbital arc)
+  // -----------------------
+  // Tube color (match HUD)
+  const TUBE_COLOR = 0x00e5ff;
+  const tubeMaterial = new THREE.MeshBasicMaterial({ color: TUBE_COLOR, transparent: true, opacity: 0.95 });
+
+  let progressMesh = null;
+  let arcStartTheta = null;        // where current arc started (radians)
+  let lastTheta = null;            // last angle to detect wrap
+  let orbitStartSimDays = 0;       // simDays when this orbit started
+
+  // Build/replace the arc geometry from start to end angle (in radians)
+  function updateProgressArc(R, startTheta, endTheta) {
+    // Ensure increasing; if end < start we reset externally (don’t draw across wrap)
+    const delta = endTheta - startTheta;
+    const steps = Math.max(8, Math.ceil(128 * (delta / (Math.PI * 2)))); // proportional detail
+    const pts = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const th = startTheta + t * delta;
+      pts.push(new THREE.Vector3(Math.cos(th) * R, 0, Math.sin(th) * R));
+    }
+    const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.0);
+    const tubularSegments = Math.max(24, steps * 3);
+    const tubeRadius = Math.max(0.01, received.planet_radius_scene * 0.22); // thin, scale with planet size
+    const radialSegments = 6;
+
+    const geom = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, radialSegments, false);
+
+    if (!progressMesh) {
+      progressMesh = new THREE.Mesh(geom, tubeMaterial);
+      progressMesh.renderOrder = 2; // draw on top if z-fighting
+      scene.add(progressMesh);
+    } else {
+      progressMesh.geometry.dispose();
+      progressMesh.geometry = geom;
+    }
+  }
 
   // -----------------------
   // Simulation time + orbit helpers
@@ -261,33 +311,51 @@
 
     const t = tMs * 0.001;
 
-    // subtle star pulse (optional)
+    // subtle star pulse + very slow spin
     placeholderStarMat.emissiveIntensity = 0.6 + Math.sin(t*1.2)*0.04;
+    starPH.rotation.y += 0.001;
+    if (starReal) starReal.rotation.y += 0.001;
 
-    // MUCH SLOWER star spin now
-    starPH.rotation.y   += 0.001;   // was 0.004
-    if (starReal)   starReal.rotation.y   += 0.001;  // was 0.005
-
-    // planet self-rotation unchanged (or tweak if you want)
+    // planet self-rotation
     planetPH.rotation.y += 0.008;
     if (planetReal) planetReal.rotation.y += 0.01;
 
     // orbit (xz-plane)
     const R = received.semi_major_axis_scene;
-    const ang = orbitAngle(received.period_days, received.t0_btjd, currentBTJD());
-    const x = Math.cos(ang) * R;
-    const z = Math.sin(ang) * R;
-    const y = 0.0;
-    planetPH.position.set(x, y, z);
-    if (planetReal) planetReal.position.set(x, y, z);
+    const theta = orbitAngle(received.period_days, received.t0_btjd, currentBTJD());
+    const x = Math.cos(theta) * R;
+    const z = Math.sin(theta) * R;
+    planetPH.position.set(x, 0, z);
+    if (planetReal) planetReal.position.set(x, 0, z);
 
-    // label text (always above because of the big local Y offset)
-    lbl.textContent = `${simDays.toFixed(2)} d`;
+    // initialize arc on first frame
+    if (arcStartTheta === null) {
+      arcStartTheta = theta;
+      lastTheta = theta;
+      orbitStartSimDays = simDays;
+      updateProgressArc(R, arcStartTheta, theta + 1e-6); // tiny stub
+    } else {
+      // detect wrap (theta decreased → new revolution)
+      if (theta < lastTheta) {
+        // reset arc for new orbit
+        arcStartTheta = theta;
+        orbitStartSimDays = simDays;
+        updateProgressArc(R, arcStartTheta, theta + 1e-6);
+      } else {
+        // extend arc
+        updateProgressArc(R, arcStartTheta, theta);
+      }
+      lastTheta = theta;
+    }
+
+    // label + HUD text (elapsed days in current orbit)
+    const orbitElapsed = simDays - orbitStartSimDays;
+    lbl.textContent = `${orbitElapsed.toFixed(2)} d`;
+    daysText.textContent = `${orbitElapsed.toFixed(2)} d`;
 
     // crossfade placeholders -> real; finish blur-down
     if (reveal > 0 && starReal && planetReal){
       reveal = Math.min(1, reveal + 0.03);
-
       const realOpacity = reveal;
       starReal.traverse(o=>{ if (o.isMesh && o.material) o.material.opacity = realOpacity; });
       planetReal.traverse(o=>{ if (o.isMesh && o.material) o.material.opacity = realOpacity; });
