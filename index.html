@@ -395,15 +395,18 @@
 
     // Final mapping (uses flipped longitude so ArrowRight moves visually right/east)
     function latLonToLocal(latDeg, lonDeg, rLocal){
-      const lat = THREE.MathUtils.degToRad(latDeg);
-      const lon = THREE.MathUtils.degToRad(-lonDeg); // flip
-      const dir = new THREE.Vector3(
-        Math.cos(lat) * Math.cos(lon),
-        Math.sin(lat),
-        Math.cos(lat) * Math.sin(lon)
-      ).normalize();
-      return dir.multiplyScalar(rLocal); // exactly on surface (no lift)
-    }
+  const LON_EAST_OFFSET_DEG = 90; // tweak here if you need a tiny nudge later
+  const lat = THREE.MathUtils.degToRad(latDeg);
+  const lon = THREE.MathUtils.degToRad(-(lonDeg - LON_EAST_OFFSET_DEG)); // flip + offset
+
+  const dir = new THREE.Vector3(
+    Math.cos(lat) * Math.cos(lon),
+    Math.sin(lat),
+    Math.cos(lat) * Math.sin(lon)
+  ).normalize();
+
+  return dir.multiplyScalar(rLocal); // exactly on surface
+}
 
     // Public: placeRegionPins(regions) — clears old pins, drops new ones
     function placeRegionPins(regions){
@@ -448,7 +451,7 @@
       scene.add(earth);
       smallEl.textContent = 'Earth loaded.';
       // Align GLB’s texture/prime meridian with our math (Greenwich at +X)
-earth.rotation.y = -Math.PI / 2;
+
 //demo pins
 
        placeRegionPins([
