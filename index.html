@@ -13,6 +13,9 @@
     body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,Segoe UI,Roboto,Inter,Arial}
     a{color:#9cf}
 
+    /* utility */
+    .hidden{display:none}
+
     /* Page layout */
     .wrap{max-width:1100px;margin:0 auto;padding:28px 16px 64px}
     h1{font-size:38px;line-height:1.1;margin:0 0 8px}
@@ -466,20 +469,33 @@
 
     // Load earth.glb
     const loader = new GLTFLoader(manager);
-    let earth = null;
+    let earth = null, earthCore = null;
     loader.load(
       './earth.glb',
       (gltf)=>{
         earth = gltf.scene;
+
+        // find biggest mesh as "core"
         earth.traverse(o=>{
-          if (o.isMesh && o.material){
+          if (o.isMesh) {
             o.material = o.material.clone();
+            if (!earthCore) earthCore = o;
+            else {
+              const a = earthCore.geometry?.boundingSphere?.radius || 0;
+              const b = o.geometry?.boundingSphere?.radius || 0;
+              if (b > a) earthCore = o;
+            }
           }
         });
+        if (earthCore && !earthCore.geometry.boundingSphere) {
+          earthCore.geometry.computeBoundingSphere();
+        }
         scene.add(earth);
         smallEl.textContent = 'Earth loaded.';
+
         // start with calibration ON
         setCalibration(true);
+        updatePin(); // place initial pin
       },
       undefined,
       (err)=> smallEl.textContent = 'Load error: ' + (err?.message || err)
@@ -488,13 +504,12 @@
     // ---------- Calibration state ----------
     const CALIB = {
       enabled: false,
-      lat: -1.0,         // start near Lake Victoria
+      lat: -1.0,   // Lake Victoria-ish
       lon: 33.0,
-      lastHoverIsEarth: false,
-      earthRadius: 1.0
+      earthRadiusLocal: 1.0
     };
 
-    // Pin geometry (cone + ring)
+    // Pin geometry (cone + ring), make it a CHILD OF EARTH so it follows transforms
     const pinGroup = new THREE.Group();
     const pinMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
     const cone = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.12, 16), pinMat);
@@ -503,35 +518,41 @@
     ring.rotation.x = Math.PI/2;
     pinGroup.add(cone, ring);
     pinGroup.visible = false;
-    scene.add(pinGroup);
 
-    function latLonToCartesian(latDeg, lonDeg, r){
+    function computeEarthRadiusLocal(){
+      if (!earth || !earthCore) return 1.0;
+      if (!earthCore.geometry.boundingSphere) earthCore.geometry.computeBoundingSphere();
+      const bs = earthCore.geometry.boundingSphere;
+      const s = new THREE.Vector3(); earthCore.getWorldScale(s);
+      // assume uniform scaling; use x
+      return bs.radius * s.x;
+    }
+
+    function latLonToLocal(latDeg, lonDeg, rLocal){
       const lat = THREE.MathUtils.degToRad(latDeg);
       const lon = THREE.MathUtils.degToRad(lonDeg);
-      const x = r * Math.cos(lat) * Math.cos(lon);
-      const y = r * Math.sin(lat);
-      const z = r * Math.cos(lat) * Math.sin(lon);
-      return new THREE.Vector3(x,y,z);
+      const dir = new THREE.Vector3(
+        Math.cos(lat)*Math.cos(lon),
+        Math.sin(lat),
+        Math.cos(lat)*Math.sin(lon)
+      ).normalize();
+      // place slightly above surface
+      const lift = 0.02;
+      pinGroup.position.copy(dir).multiplyScalar(rLocal + lift);
+
+      // orient cone outward
+      const up = new THREE.Vector3(0,1,0);
+      pinGroup.quaternion.setFromUnitVectors(up, dir);
     }
 
     function updatePin(){
       if (!earth) return;
-      // get approximate earth radius from bounding sphere (once)
-      if (CALIB.earthRadius === 1.0){
-        const box = new THREE.Box3().setFromObject(earth);
-        const sphere = box.getBoundingSphere(new THREE.Sphere());
-        CALIB.earthRadius = sphere.radius;
-      }
-      const r = CALIB.earthRadius;
-      const pos = latLonToCartesian(CALIB.lat, CALIB.lon, r + 0.02);
-      pinGroup.position.copy(pos);
+      if (!earth.children.includes(pinGroup)) earth.add(pinGroup);
 
-      // orient the cone along the outward normal
-      const normal = pos.clone().normalize();
-      const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), normal);
-      pinGroup.setRotationFromQuaternion(quat);
+      // recompute (handles any GLB scale)
+      CALIB.earthRadiusLocal = computeEarthRadiusLocal();
 
-      // HUD text
+      latLonToLocal(CALIB.lat, CALIB.lon, CALIB.earthRadiusLocal);
       latValEl.textContent = `${CALIB.lat.toFixed(3)}°`;
       lonValEl.textContent = `${CALIB.lon.toFixed(3)}°`;
     }
@@ -540,52 +561,54 @@
       CALIB.enabled = on;
       pinGroup.visible = on;
       calibHUD.classList.toggle('hidden', !on);
+      if (on && earth && !earth.children.includes(pinGroup)) {
+        earth.add(pinGroup);
+      }
       smallEl.textContent = on ? 'Calibration: ON (use arrows, Shift for fine)' : 'Calibration: OFF';
     }
 
-    // Animate
+    // Animate (stop auto-rotation when calibrating)
     let rotateEarth = true;
     function animate(){
       requestAnimationFrame(animate);
-      if (earth){
-        if (rotateEarth && !CALIB.enabled) earth.rotation.y += 0.0018;
-      }
+      if (earth && rotateEarth && !CALIB.enabled) earth.rotation.y += 0.0018;
       if (CALIB.enabled) updatePin();
       controls.update();
       renderer.render(scene, camera);
     }
     animate();
 
-    // Focus handling (so arrows affect Earth only when hovered)
-    panel.addEventListener('pointerenter', ()=> CALIB.lastHoverIsEarth = true);
-    panel.addEventListener('pointerleave', ()=> CALIB.lastHoverIsEarth = false);
+    // Hover gating (so arrow keys only affect Earth panel when cursor is over it)
+    let hover = false;
+    panel.addEventListener('pointerenter', ()=> hover = true);
+    panel.addEventListener('pointerleave', ()=> hover = false);
 
     // Keyboard calibration controls
     window.addEventListener('keydown', (e)=>{
-      if (!CALIB.lastHoverIsEarth) return; // only when mouse over Earth panel
+      if (!hover) return; // only when cursor is over Earth panel
 
-      const big = !e.shiftKey ? 1.0 : 0.1;   // 1° or 0.1° steps
+      const step = e.shiftKey ? 0.1 : 1.0;   // fine vs coarse
       if (e.key === 'c' || e.key === 'C'){
         setCalibration(!CALIB.enabled);
-        rotateEarth = !CALIB.enabled; // stop rotation while calibrating
+        rotateEarth = !CALIB.enabled;
       } else if (!CALIB.enabled){
         return;
       } else if (e.key === 'ArrowUp'){
-        CALIB.lat = Math.min(90, CALIB.lat + big);
+        CALIB.lat = Math.min(90, CALIB.lat + step);
       } else if (e.key === 'ArrowDown'){
-        CALIB.lat = Math.max(-90, CALIB.lat - big);
+        CALIB.lat = Math.max(-90, CALIB.lat - step);
       } else if (e.key === 'ArrowRight'){
-        CALIB.lon = (CALIB.lon + big + 540) % 360 - 180; // keep in [-180,180)
+        CALIB.lon = (CALIB.lon + step + 540) % 360 - 180;
       } else if (e.key === 'ArrowLeft'){
-        CALIB.lon = (CALIB.lon - big + 540) % 360 - 180;
+        CALIB.lon = (CALIB.lon - step + 540) % 360 - 180;
       } else if (e.key === 'r' || e.key === 'R'){
         CALIB.lat = 0; CALIB.lon = 0;
       } else if (e.key === '1'){
-        CALIB.lat = -1.0; CALIB.lon = 33.0;           // Lake Victoria
+        CALIB.lat = -1.0; CALIB.lon = 33.0;         // Lake Victoria
       } else if (e.key === '2'){
-        CALIB.lat = 30.044; CALIB.lon = 31.235;       // Cairo
+        CALIB.lat = 30.044; CALIB.lon = 31.235;     // Cairo
       } else if (e.key === '3'){
-        CALIB.lat = -33.925; CALIB.lon = 18.424;      // Cape Town
+        CALIB.lat = -33.925; CALIB.lon = 18.424;    // Cape Town
       } else { return; }
       e.preventDefault();
       updatePin();
