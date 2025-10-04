@@ -5,10 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Silent Planets — TESS Orbit Viz</title>
   <style>
-    :root{
-      --bg:#0b0b0b; --ink:#fff; --muted:#cfd3dc; --card:#111318; --glass:rgba(0,0,0,.55);
-      --accent:#00e5ff;
-    }
+    :root{ --bg:#0b0b0b; --ink:#fff; --muted:#cfd3dc; --card:#111318; --glass:rgba(0,0,0,.55); --accent:#00e5ff; }
     html,body{height:100%}
     body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,Segoe UI,Roboto,Inter,Arial}
     a{color:#9cf}
@@ -16,49 +13,26 @@
     h1{font-size:38px;line-height:1.1;margin:0 0 8px}
     .lead{color:var(--muted);margin:0 0 20px}
 
-    .card{
-      background:var(--card);
-      border:1px solid #1a1d24;
-      border-radius:16px;
-      box-shadow:0 6px 24px rgba(0,0,0,.35);
-      overflow:hidden;
-    }
+    .card{background:var(--card);border:1px solid #1a1d24;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.35);overflow:hidden}
     .card + .card{ margin-top:18px; }
-    .card-head{
-      display:flex;align-items:center;justify-content:space-between;
-      padding:10px 12px;border-bottom:1px solid #1a1d24;background:#0e1016;
-    }
+    .card-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #1a1d24;background:#0e1016}
     .card-head h2{margin:0;font-size:16px;font-weight:700}
     .card-head .right{display:flex;gap:8px;align-items:center}
-    .btn{
-      appearance:none;border:1px solid #2a2e3a;background:#131721;color:#eaf6ff;cursor:pointer;
-      padding:8px 12px;border-radius:10px;font-weight:700;font-size:12px;letter-spacing:.3px;
-    }
+    .btn{appearance:none;border:1px solid #2a2e3a;background:#131721;color:#eaf6ff;cursor:pointer;padding:8px 12px;border-radius:10px;font-weight:700;font-size:12px;letter-spacing:.3px}
     .btn:hover{background:#0f1420}
     .hint{font-size:12px;color:#9fb0c8}
 
-    .sim-panel{
-      position:relative;width:100%;height:60vh;min-height:380px;background:#0a0c11;
-    }
-
-    .overlay{
-      position:absolute;inset:0;pointer-events:none;display:flex;align-items:flex-start;justify-content:center
-    }
-    .panel{
-      margin-top:14px;background:var(--glass);backdrop-filter:saturate(140%) blur(6px);
-      border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.4;max-width:520px
-    }
+    .sim-panel{position:relative;width:100%;height:60vh;min-height:380px;background:#0a0c11}
+    .overlay{position:absolute;inset:0;pointer-events:none;display:flex;align-items:flex-start;justify-content:center}
+    .panel{margin-top:14px;background:var(--glass);backdrop-filter:saturate(140%) blur(6px);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.4;max-width:520px}
     .bar{height:4px;background:rgba(255,255,255,.15);border-radius:2px;overflow:hidden;margin-top:6px}
     .fill{height:100%;width:0%;background:linear-gradient(90deg,#9cf,#9f9);transition:width .15s ease}
     .small{opacity:.85;font-size:11px;color:#ddd}
     .kbd{background:#222;border:1px solid #333;border-radius:4px;padding:1px 4px}
 
-    #daysHUD{
-      position:absolute;top:12px;right:12px;pointer-events:none;
-      z-index:2;text-align:right;
-    }
-    #daysHUD .title{font-weight:700;font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:#a9cfe0;}
-    #daysHUD .value{margin-top:2px;font-weight:900;font-size:32px;line-height:1;color:var(--accent);text-shadow:0 0 10px rgba(0,229,255,.35);}
+    #daysHUD{position:absolute;top:12px;right:12px;pointer-events:none;z-index:2;text-align:right}
+    #daysHUD .title{font-weight:700;font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:#a9cfe0}
+    #daysHUD .value{margin-top:2px;font-weight:900;font-size:32px;line-height:1;color:var(--accent);text-shadow:0 0 10px rgba(0,229,255,.35)}
 
     .sim-panel canvas{position:absolute;inset:0;z-index:0;display:block;filter:blur(10px)}
     .sim-panel .css2d{position:absolute;inset:0;pointer-events:none;z-index:1}
@@ -69,7 +43,7 @@
   </style>
 
   <script type="importmap">
-  { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
   </script>
 </head>
 <body>
@@ -77,7 +51,7 @@
     <h1>Silent Planets</h1>
     <p class="lead">TESS transit candidates rendered as orbits. Choose Fullscreen when you’re ready to present.</p>
 
-    <!-- ====================== ORBIT SIM TILE (unchanged) ====================== -->
+    <!-- =============== ORBIT SIM =============== -->
     <div class="card">
       <div class="card-head">
         <h2>Orbit Simulation</h2>
@@ -103,7 +77,7 @@
       </div>
     </div>
 
-    <!-- ====================== EARTH VIEWER ====================== -->
+    <!-- =============== EARTH VIEWER =============== -->
     <div class="card">
       <div class="card-head">
         <h2>Earth Viewer</h2>
@@ -135,7 +109,7 @@
   import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
   import { CSS2DRenderer } from 'https://unpkg.com/three@0.160.0/examples/jsm/renderers/CSS2DRenderer.js';
 
-  /* ====================== ORBIT SIM (unchanged) ====================== */
+  /* ====================== ORBIT SIM ====================== */
   const received = { tic:261136679, spectral_type:"A", period_days:5.4321, t0_btjd:134.5342, semi_major_axis_scene:1.4, planet_radius_scene:0.25, star_radius_scene:0.7 };
   const MIN_ORBIT_MULT = 8;
   if (received.semi_major_axis_scene < MIN_ORBIT_MULT * received.star_radius_scene) {
@@ -320,7 +294,7 @@
   });
   setProgress(5);
 
-  /* ====================== EARTH VIEWER (final, no calibration) ====================== */
+  /* ====================== EARTH VIEWER (final) ====================== */
   (function initEarthViewer(){
     const panel   = document.getElementById('earthPanel');
     const fsBtn   = document.getElementById('earthFsBtn');
@@ -370,16 +344,13 @@
     const loader = new GLTFLoader(manager);
     let earth = null, earthCore = null;
 
-    // Shared pin assets (one human blue)
+    // Shared pin assets (single color)
     const PIN_MAT = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
     const PIN_CONE = new THREE.ConeGeometry(0.03, 0.12, 16);
     const PIN_RING = new THREE.TorusGeometry(0.045, 0.008, 8, 24);
-    // Slight polygon offset on ring to avoid z-fighting while still "touching" surface
     PIN_MAT.polygonOffset = true; PIN_MAT.polygonOffsetFactor = -1; PIN_MAT.polygonOffsetUnits = -1;
 
-    // Active pins store (so we can clear per-star)
     let activePins = [];
-
     function createPin(){
       const g = new THREE.Group();
       const cone = new THREE.Mesh(PIN_CONE, PIN_MAT);
@@ -390,42 +361,47 @@
       return g;
     }
 
-    // Earth radius in local units. Your GLB uses R = 1.0, so return 1.
+    // GLB is built with Earth radius ≈ 1 unit
     function getEarthRadiusLocal(){ return 1.0; }
 
-    // Final mapping (uses flipped longitude so ArrowRight moves visually right/east)
-  function latLonToLocal(latDeg, lonDeg, rLocal) {
-  // Convert degrees to radians
-  const lat = THREE.MathUtils.degToRad(latDeg);
-  const lon = THREE.MathUtils.degToRad(-lonDeg); // flip for right-hand orientation
+    /* -------- Mapping helpers -------- */
 
-  // Direction vector from center of globe
-  const dir = new THREE.Vector3(
-    Math.cos(lat) * Math.cos(lon),
-    Math.sin(lat),
-    Math.cos(lat) * Math.sin(lon)
-  ).normalize();
+    // YOU feed this with real-world coords.
+    // Africa fix from our calibration:
+    function toGlobe(lat, lon) {
+      return {
+        lat: lat - 7,                                   // southward offset
+        lon: ((lon + 80 + 180) % 360) - 180            // rotate 80° east, wrap [-180,180]
+      };
+    }
 
-  // Return scaled vector (on surface)
-  return dir.multiplyScalar(rLocal);
-}
+    // Final projection (only sign flip to match RH system; no extra +90)
+    function latLonToLocal(latDeg, lonDeg, rLocal) {
+      const lat = THREE.MathUtils.degToRad(latDeg);
+      const lon = THREE.MathUtils.degToRad(-lonDeg); // flip for RH orientation
+      const dir = new THREE.Vector3(
+        Math.cos(lat) * Math.cos(lon),
+        Math.sin(lat),
+        Math.cos(lat) * Math.sin(lon)
+      ).normalize();
+      return dir.multiplyScalar(rLocal);
+    }
 
-    // Public: placeRegionPins(regions) — clears old pins, drops new ones
+    // Public API: give an array of bundles; each bundle is an array of {lat,lon}
     function placeRegionPins(regions){
       if (!earth) return;
       // clear previous
-      for (const p of activePins){
-        earth.remove(p);
-        p.traverse(o=>{ if (o.isMesh) { /* keep shared geo/material; nothing to dispose */ } });
-      }
+      for (const p of activePins) earth.remove(p);
       activePins = [];
 
       const r = getEarthRadiusLocal();
       for (const bundle of regions){
-        for (const coord of bundle){
-          const { lat, lon } = coord;
+        for (const {lat, lon} of bundle){
+          // map real → globe-calibrated
+          const g = toGlobe(lat, lon);
+          // project to the mesh
+          const pos = latLonToLocal(g.lat, g.lon, r);
           const pin = createPin();
-          const pos = latLonToLocal(lat, lon, r);
           pin.position.copy(pos);
           pin.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), pos.clone().normalize());
           earth.add(pin);
@@ -433,8 +409,7 @@
         }
       }
     }
-    // expose for your backend
-    window.placeRegionPins = placeRegionPins;
+    window.placeRegionPins = placeRegionPins; // expose for backend
 
     loader.load('./earth.glb', (gltf)=>{
       earth = gltf.scene;
@@ -452,21 +427,15 @@
       if (earthCore && !earthCore.geometry.boundingSphere) earthCore.geometry.computeBoundingSphere();
       scene.add(earth);
       smallEl.textContent = 'Earth loaded.';
-      // Align GLB’s texture/prime meridian with our math (Greenwich at +X)
 
-//demo pins
-
-       placeRegionPins([
-         [ {lat:-1, lon:33}, {lat:0, lon:32.7}, {lat:1, lon:33.2} ],          // bundle 1
-         [ {lat:30.044, lon:31.235}, {lat:29.95, lon:31.4} ]                  // bundle 2
-       ]);
-
-      // end demo
-
-      
+      // --- Demo pins (real-world coords) ---
+      placeRegionPins([
+        [ {lat:-1, lon:33}, {lat:0, lon:32.7}, {lat:1, lon:33.2} ],           // E Africa cluster
+        [ {lat:30.044, lon:31.235}, {lat:29.95, lon:31.4} ]                   // Cairo area
+      ]);
+      // --- End demo ---
     }, undefined, (err)=> smallEl.textContent = 'Load error: ' + (err?.message || err));
 
-    // Simple rotation (presentation mode)
     function animate(){
       requestAnimationFrame(animate);
       if (earth) earth.rotation.y += 0.0018;
@@ -483,13 +452,8 @@
       else { await document.exitFullscreen(); fsBtn.textContent='Enter Fullscreen'; }
       sizeEarthToPanel(camera, renderer);
     });
-
-    // --- DEMO CALL (remove or replace) ---
-    setTimeout(()=>{
-      
-   }, 1200);
-      // demo call ends here 
   })();
 </script>
 </body>
 </html>
+```0
