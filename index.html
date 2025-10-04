@@ -26,6 +26,7 @@
       box-shadow:0 6px 24px rgba(0,0,0,.35);
       overflow:hidden;
     }
+    .card + .card{ margin-top:18px; } /* (added) little gap between tiles */
     .card-head{
       display:flex;align-items:center;justify-content:space-between;
       padding:10px 12px;border-bottom:1px solid #1a1d24;background:#0e1016;
@@ -92,6 +93,7 @@
     <h1>Silent Planets</h1>
     <p class="lead">TESS transit candidates rendered as orbits. Choose Fullscreen when you’re ready to present.</p>
 
+    <!-- ====================== EXISTING TILE (unchanged) ====================== -->
     <div class="card">
       <div class="card-head">
         <h2>Orbit Simulation</h2>
@@ -118,6 +120,29 @@
       </div>
     </div>
 
+    <!-- ====================== NEW TILE: Earth Viewer ====================== -->
+    <div class="card">
+      <div class="card-head">
+        <h2>Earth Viewer (Preview)</h2>
+        <div class="right">
+          <span class="hint">GLB: <code>earth.glb</code> in this folder</span>
+          <button id="earthFsBtn" class="btn" type="button">Enter Fullscreen</button>
+        </div>
+      </div>
+
+      <div id="earthPanel" class="sim-panel">
+        <!-- Progress HUD for Earth -->
+        <div class="overlay" id="earthHud">
+          <div class="panel">
+            <div><b>Loading Earth…</b> <span id="earthPct">0%</span></div>
+            <div class="small" id="earthSmall">Setting up lights &amp; controls…</div>
+            <div class="bar"><div class="fill" id="earthFill"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- (Your notes grid stays) -->
     <div class="grid">
       <div class="note">Hook this to your backend payload. We’ll map <b>TIC</b>, <b>period</b>, <b>t0 (BTJD)</b>, and star type to the viz.</div>
       <div class="note">Add more sections here (model status, latest detections, controls, etc.).</div>
@@ -351,7 +376,105 @@
   });
 
   setProgress(5);
+
+  /* ====================== EARTH VIEWER: isolated block (no changes above) ====================== */
+  (function initEarthViewer(){
+    const panel   = document.getElementById('earthPanel');
+    const fsBtn   = document.getElementById('earthFsBtn');
+    const pctEl   = document.getElementById('earthPct');
+    const fillEl  = document.getElementById('earthFill');
+    const smallEl = document.getElementById('earthSmall');
+
+    // Local helpers
+    function setEarthProgress(p){
+      const v = Math.max(0, Math.min(100, p));
+      pctEl.textContent = v.toFixed(0) + '%';
+      fillEl.style.width = v + '%';
+    }
+    function sizeEarthToPanel(camera, renderer){
+      const w = panel.clientWidth, h = panel.clientHeight;
+      camera.aspect = w / h; camera.updateProjectionMatrix();
+      renderer.setSize(w, h, false);
+    }
+
+    // Scene
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b0b0b);
+
+    const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 1000);
+    camera.position.set(0, 0.8, 2.2);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
+    else renderer.outputEncoding = THREE.sRGBEncoding;
+    panel.appendChild(renderer.domElement);
+    sizeEarthToPanel(camera, renderer);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    // Lights
+    const amb  = new THREE.AmbientLight(0xffffff, 0.35);
+    const key  = new THREE.DirectionalLight(0xffffff, 1.1); key.position.set( 5, 4,  6);
+    const rim  = new THREE.DirectionalLight(0x99b7ff, 0.6); rim.position.set(-6, 2, -4);
+    const hemi = new THREE.HemisphereLight(0x668cff, 0x0a0c11, 0.3);
+    scene.add(amb, key, rim, hemi);
+
+    // Progress / blur
+    function applyEarthBlur(px){ renderer.domElement.style.filter = `blur(${px}px)`; }
+    let blur = 10; applyEarthBlur(blur);
+
+    const manager = new THREE.LoadingManager();
+    manager.onProgress = (_url, loaded, total)=>{
+      const p = total ? (loaded/total)*100 : 50;
+      setEarthProgress(p);
+      blur = 10 * (1 - p/100);
+      applyEarthBlur(blur);
+    };
+    manager.onLoad = ()=>{
+      setEarthProgress(100);
+      applyEarthBlur(0);
+      document.getElementById('earthHud').style.display = 'none';
+    };
+
+    // Load earth.glb
+    const loader = new GLTFLoader(manager);
+    let earth = null;
+    loader.load(
+      './earth.glb',
+      (gltf)=>{
+        earth = gltf.scene;
+        earth.traverse(o=>{
+          if (o.isMesh && o.material){
+            o.material = o.material.clone();
+          }
+        });
+        scene.add(earth);
+        smallEl.textContent = 'Earth loaded.';
+      },
+      undefined,
+      (err)=> smallEl.textContent = 'Load error: ' + (err?.message || err)
+    );
+
+    // Animate
+    function animate(){
+      requestAnimationFrame(animate);
+      if (earth) earth.rotation.y += 0.0018;
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Resize & fullscreen (only for this panel)
+    const onResize = ()=> sizeEarthToPanel(camera, renderer);
+    addEventListener('resize', onResize);
+    document.addEventListener('fullscreenchange', onResize);
+    fsBtn.addEventListener('click', async ()=>{
+      if (!document.fullscreenElement){ await panel.requestFullscreen(); fsBtn.textContent='Exit Fullscreen'; }
+      else { await document.exitFullscreen(); fsBtn.textContent='Enter Fullscreen'; }
+      sizeEarthToPanel(camera, renderer);
+    });
+  })();
 </script>
 </body>
 </html>
-```0
