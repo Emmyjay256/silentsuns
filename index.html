@@ -519,14 +519,18 @@
     pinGroup.add(cone, ring);
     pinGroup.visible = false;
 
-    function computeEarthRadiusLocal(){
+    /*function computeEarthRadiusLocal(){
       if (!earth || !earthCore) return 1.0;
       if (!earthCore.geometry.boundingSphere) earthCore.geometry.computeBoundingSphere();
       const bs = earthCore.geometry.boundingSphere;
       const s = new THREE.Vector3(); earthCore.getWorldScale(s);
       // assume uniform scaling; use x
       return bs.radius * s.x;
-    }
+    }*/
+
+    function computeEarthRadiusLocal(){
+  return 1.0; // force Earth radius to 1 meter unit for calibration
+}
 
     function latLonToLocal(latDeg, lonDeg, rLocal){
       const lat = THREE.MathUtils.degToRad(latDeg);
