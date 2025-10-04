@@ -447,6 +447,8 @@
       if (earthCore && !earthCore.geometry.boundingSphere) earthCore.geometry.computeBoundingSphere();
       scene.add(earth);
       smallEl.textContent = 'Earth loaded.';
+      // Align GLB’s texture/prime meridian with our math (Greenwich at +X)
+earth.rotation.y = -Math.PI / 2;
 //demo pins
 
        placeRegionPins([
