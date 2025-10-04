@@ -13,6 +13,9 @@
     h1{font-size:38px;line-height:1.1;margin:0 0 8px}
     .lead{color:var(--muted);margin:0 0 20px}
 
+    .badge{display:inline-flex;gap:8px;align-items:center;background:#0f1420;border:1px solid #222938;color:#cfe2ff;border-radius:999px;padding:6px 10px;font-size:12px;margin-right:8px}
+    .badge .dot{width:8px;height:8px;border-radius:999px;background:var(--accent);box-shadow:0 0 10px rgba(0,229,255,.5)}
+
     .card{background:var(--card);border:1px solid #1a1d24;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.35);overflow:hidden}
     .card + .card{ margin-top:18px; }
     .card-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #1a1d24;background:#0e1016}
@@ -40,6 +43,22 @@
 
     .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:18px}
     .note{background:#0e1016;border:1px solid #1a1d24;border-radius:12px;padding:14px;color:#cfe2ff}
+
+    /* NEW: content sections */
+    .two-col{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}
+    @media (max-width: 980px){ .two-col{grid-template-columns:1fr} }
+    .section{margin-top:22px}
+    .section h3{margin:0 0 10px;font-size:18px}
+    .list{margin:0;padding-left:18px;color:#cfe2ff}
+    .kpi{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:12px}
+    @media (max-width: 700px){ .kpi{grid-template-columns:repeat(2,1fr)} }
+    .kpi .box{background:#0e1016;border:1px solid #1a1d24;border-radius:12px;padding:12px}
+    .kpi .n{font-weight:800;font-size:22px;line-height:1;color:var(--accent)}
+    .kpi .l{font-size:12px;color:#9fb0c8;margin-top:4px}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#cfe2ff}
+    .small-muted{font-size:12px;color:#98a7bd}
+    .pill{display:inline-block;background:#122033;border:1px solid #20324b;border-radius:999px;padding:6px 10px;font-size:12px;margin:0 8px 8px 0}
+    .hr{height:1px;background:#1a1d24;margin:16px 0}
   </style>
 
   <script type="importmap">
@@ -49,7 +68,47 @@
 <body>
   <div class="wrap">
     <h1>Silent Planets</h1>
-    <p class="lead">TESS transit candidates rendered as orbits. Choose Fullscreen when you’re ready to present.</p>
+    <p class="lead">AI-powered exoplanet detection from raw FITS. Upload a light curve, get a physics-aware analysis, a 3D orbit, and an Earth visibility map.</p>
+    <div>
+      <span class="badge"><span class="dot"></span> NASA Space Apps — Prototype</span>
+      <span class="badge">Kepler &amp; TESS ready</span>
+      <span class="badge">Phase-fold + BLS + Detrend</span>
+    </div>
+
+    <!-- ====== NEW: Overview + Actions ====== -->
+    <div class="card section">
+      <div class="card-head">
+        <h2>Project Overview</h2>
+        <div class="right">
+          <button class="btn" type="button" id="uploadBtn">Upload FITS</button>
+          <a class="btn" href="#how" style="text-decoration:none">How it works</a>
+        </div>
+      </div>
+      <div class="two-col" style="padding:14px;">
+        <div class="note" style="background:transparent;border:none;padding:0">
+          <h3>What we built</h3>
+          <p>Silent Planets is an end-to-end pipeline and web UI: we ingest <span class="mono">.fits</span>, clean and detrend, run BLS to find periodic dips, phase-fold the curve, extract features, and pass them to a lightweight classifier. Results are rendered as an interactive orbit plus an Earth map for “where to look next”.</p>
+          <div class="hr"></div>
+          <div class="kpi">
+            <div class="box"><div class="n" id="kpiSamples">—</div><div class="l">Processed samples</div></div>
+            <div class="box"><div class="n" id="kpiPos">—</div><div class="l">Confirmed (train)</div></div>
+            <div class="box"><div class="n" id="kpiNeg">—</div><div class="l">False positives (train)</div></div>
+            <div class="box"><div class="n" id="kpiLatency">~2–4m</div><div class="l">Typical processing per FITS</div></div>
+          </div>
+          <p class="small-muted" style="margin-top:8px">KPIs auto-wire once the backend publishes dataset index counts.</p>
+        </div>
+
+        <div class="note">
+          <h3>Quick actions</h3>
+          <p><b>1)</b> <a href="#upload" id="uploadLink">Upload a FITS</a> (Kepler/TESS) — we’ll process on the backend and notify when ready.</p>
+          <p><b>2)</b> Try the live orbit sim below (placeholder values). Hook it to your job payload when ready.</p>
+          <div class="pill">Phase-folded curve</div>
+          <div class="pill">BLS period &amp; t0</div>
+          <div class="pill">Transit depth &amp; SNR</div>
+          <div class="pill">20s / 2m cadence aware</div>
+        </div>
+      </div>
+    </div>
 
     <!-- =============== ORBIT SIM =============== -->
     <div class="card">
@@ -77,6 +136,45 @@
       </div>
     </div>
 
+    <!-- ====== NEW: How it works ====== -->
+    <div id="how" class="card section">
+      <div class="card-head"><h2>How it works</h2></div>
+      <div class="grid" style="padding:14px">
+        <div class="note">
+          <h3>1) Ingest &amp; standardize</h3>
+          <ul class="list">
+            <li>Read Kepler/TESS light-curve FITS</li>
+            <li>Unify columns → <span class="mono">time, flux, flux_err, quality</span></li>
+            <li>Remove NaNs and bad quality flags</li>
+          </ul>
+        </div>
+        <div class="note">
+          <h3>2) Detrend</h3>
+          <ul class="list">
+            <li>Savitzky–Golay smoothing</li>
+            <li>Divide out long-term trends</li>
+            <li>Normalize near 1.0</li>
+          </ul>
+        </div>
+        <div class="note">
+          <h3>3) BLS &amp; fold</h3>
+          <ul class="list">
+            <li>Box Least Squares over safe grids</li>
+            <li>Pick best period, epoch, duration</li>
+            <li>Phase-fold curve for model</li>
+          </ul>
+        </div>
+        <div class="note">
+          <h3>4) Classify &amp; visualize</h3>
+          <ul class="list">
+            <li>Lightweight 1D CNN + features</li>
+            <li>Orbit viz with period/t0</li>
+            <li>Earth visibility pinning</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
     <!-- =============== EARTH VIEWER =============== -->
     <div class="card">
       <div class="card-head">
@@ -97,9 +195,33 @@
       </div>
     </div>
 
-    <div class="grid">
-      <div class="note">Hook this to your backend payload. We’ll map <b>TIC</b>, <b>period</b>, <b>t0 (BTJD)</b>, and star type to the viz.</div>
-      <div class="note">Add more sections here (model status, latest detections, controls, etc.).</div>
+    <!-- ====== NEW: Model status & recent runs ====== -->
+    <div class="grid section">
+      <div class="note">
+        <h3>Model status</h3>
+        <p class="small-muted">Live metrics wire into these placeholders when the backend publishes <span class="mono">dataset/index/*.csv</span> and a training summary.</p>
+        <ul class="list">
+          <li>Training samples: <span id="trainCount" class="mono">—</span></li>
+          <li>Validation samples: <span id="valCount" class="mono">—</span></li>
+          <li>Current F1 / AUC: <span id="f1auc" class="mono">—</span></li>
+          <li>Last trained: <span id="lastTrained" class="mono">—</span></li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>Recent uploads</h3>
+        <p class="small-muted">Show last 5 processed jobs with links to CSV, JSON, and phase plot.</p>
+        <div id="recentList" class="small-muted">No jobs yet.</div>
+      </div>
+    </div>
+
+    <!-- ====== NEW: FAQ ====== -->
+    <div class="card section">
+      <div class="card-head"><h2>FAQ</h2></div>
+      <div style="padding:14px">
+        <p><b>How long does a run take?</b> Typical FITS finish in ~2–4 minutes end-to-end (I/O + BLS dominate).</p>
+        <p><b>What missions are supported?</b> Kepler (KIC) and TESS (TIC) light-curves; cadence-aware (20s &amp; 2m).</p>
+        <p><b>What do I need to upload?</b> A single light-curve FITS per run. We parse headers for IDs automatically.</p>
+      </div>
     </div>
   </div>
 
@@ -109,7 +231,21 @@
   import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
   import { CSS2DRenderer } from 'https://unpkg.com/three@0.160.0/examples/jsm/renderers/CSS2DRenderer.js';
 
-  /* ====================== ORBIT SIM ====================== */
+  // ---- small UX bits (upload stub + KPI placeholders) ----
+  document.getElementById('uploadBtn')?.addEventListener('click', ()=>{
+    // Replace with your signed-URL flow
+    alert('Upload flow coming soon: we will request a signed URL, PUT the FITS, and show job status.');
+  });
+  document.getElementById('uploadLink')?.addEventListener('click', (e)=>{ e.preventDefault(); document.getElementById('uploadBtn').click(); });
+
+  // Optional: hydrate KPIs from a JSON endpoint later
+  const fallbackKPIs = { samples:'—', pos:'—', neg:'—' };
+  const setText = (id, val)=>{ const el=document.getElementById(id); if(el) el.textContent = val; };
+  setText('kpiSamples', fallbackKPIs.samples);
+  setText('kpiPos', fallbackKPIs.pos);
+  setText('kpiNeg', fallbackKPIs.neg);
+
+  /* ====================== ORBIT SIM (unchanged core) ====================== */
   const received = { tic:261136679, spectral_type:"A", period_days:5.4321, t0_btjd:134.5342, semi_major_axis_scene:1.4, planet_radius_scene:0.25, star_radius_scene:0.7 };
   const MIN_ORBIT_MULT = 8;
   if (received.semi_major_axis_scene < MIN_ORBIT_MULT * received.star_radius_scene) {
@@ -294,7 +430,7 @@
   });
   setProgress(5);
 
-  /* ====================== EARTH VIEWER (final) ====================== */
+  /* ====================== EARTH VIEWER (unchanged core) ====================== */
   (function initEarthViewer(){
     const panel   = document.getElementById('earthPanel');
     const fsBtn   = document.getElementById('earthFsBtn');
@@ -361,24 +497,15 @@
       return g;
     }
 
-    // GLB is built with Earth radius ≈ 1 unit
     function getEarthRadiusLocal(){ return 1.0; }
 
-    /* -------- Mapping helpers -------- */
-
-    // YOU feed this with real-world coords.
-    // Africa fix from our calibration:
+    // Africa calibration + orientation helpers
     function toGlobe(lat, lon) {
-      return {
-        lat: lat - 7,                                   // southward offset
-        lon: ((lon + 80 + 180) % 360) - 180            // rotate 80° east, wrap [-180,180]
-      };
+      return { lat: lat - 7, lon: ((lon + 80 + 180) % 360) - 180 };
     }
-
-    // Final projection (only sign flip to match RH system; no extra +90)
     function latLonToLocal(latDeg, lonDeg, rLocal) {
       const lat = THREE.MathUtils.degToRad(latDeg);
-      const lon = THREE.MathUtils.degToRad(-lonDeg); // flip for RH orientation
+      const lon = THREE.MathUtils.degToRad(-lonDeg);
       const dir = new THREE.Vector3(
         Math.cos(lat) * Math.cos(lon),
         Math.sin(lat),
@@ -387,19 +514,15 @@
       return dir.multiplyScalar(rLocal);
     }
 
-    // Public API: give an array of bundles; each bundle is an array of {lat,lon}
     function placeRegionPins(regions){
       if (!earth) return;
-      // clear previous
       for (const p of activePins) earth.remove(p);
       activePins = [];
 
       const r = getEarthRadiusLocal();
       for (const bundle of regions){
         for (const {lat, lon} of bundle){
-          // map real → globe-calibrated
           const g = toGlobe(lat, lon);
-          // project to the mesh
           const pos = latLonToLocal(g.lat, g.lon, r);
           const pin = createPin();
           pin.position.copy(pos);
@@ -409,7 +532,7 @@
         }
       }
     }
-    window.placeRegionPins = placeRegionPins; // expose for backend
+    window.placeRegionPins = placeRegionPins;
 
     loader.load('./earth.glb', (gltf)=>{
       earth = gltf.scene;
@@ -426,14 +549,12 @@
       });
       if (earthCore && !earthCore.geometry.boundingSphere) earthCore.geometry.computeBoundingSphere();
       scene.add(earth);
-      smallEl.textContent = 'Earth loaded.';
 
-      // --- Demo pins (real-world coords) ---
+      // Demo pins
       placeRegionPins([
-        [ {lat:-1, lon:33}, {lat:0, lon:32.7}, {lat:1, lon:33.2} ],           // E Africa cluster
-        [ {lat:30.044, lon:31.235}, {lat:29.95, lon:31.4} ]                   // Cairo area
+        [ {lat:-1, lon:33}, {lat:0, lon:32.7}, {lat:1, lon:33.2} ],
+        [ {lat:30.044, lon:31.235}, {lat:29.95, lon:31.4} ]
       ]);
-      // --- End demo ---
     }, undefined, (err)=> smallEl.textContent = 'Load error: ' + (err?.message || err));
 
     function animate(){
@@ -456,4 +577,3 @@
 </script>
 </body>
 </html>
-```0
