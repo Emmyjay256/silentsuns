@@ -63,11 +63,28 @@
       position:absolute;top:12px;right:12px;pointer-events:none;
       font-weight:800;font-size:28px;line-height:1;color:var(--accent);
       text-shadow:0 0 10px rgba(0,229,255,.35);
+      z-index:2; /* ABOVE canvases & CSS2D */
     }
     #daysHUD small{font-weight:600;font-size:12px;opacity:.8;display:block}
 
-    /* Canvas blur dialed down as we load (we attach canvas into .sim-panel) */
-    .sim-panel canvas{display:block;filter:blur(10px)}
+    /* --- LAYERING FIXES --- */
+    /* WebGL canvas sits at the bottom */
+    .sim-panel canvas{
+      position:absolute;
+      inset:0;
+      z-index:0;
+      display:block;
+      filter:blur(10px);
+    }
+    /* CSS2D label canvas above WebGL */
+    .sim-panel .css2d{
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+      z-index:1;
+    }
+    /* Loading HUD always on top while visible */
+    #hud{ z-index:3; }
 
     /* CSS2D label above planet */
     .label{
@@ -179,6 +196,12 @@
   labelRenderer.domElement.style.inset = '0';
   labelRenderer.domElement.style.pointerEvents = 'none';
   simPanel.appendChild(labelRenderer.domElement);
+
+  /* --- LAYERING FIXES (JS): ensure canvases pick up the z-order --- */
+  renderer.domElement.style.position = 'absolute';
+  renderer.domElement.style.inset = '0';
+  renderer.domElement.style.zIndex = '0';
+  labelRenderer.domElement.classList.add('css2d'); // z-index:1 via CSS
 
   // size to panel
   function sizeToPanel(){
