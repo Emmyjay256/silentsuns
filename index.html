@@ -59,6 +59,23 @@
     .small-muted{font-size:12px;color:#98a7bd}
     .pill{display:inline-block;background:#122033;border:1px solid #20324b;border-radius:999px;padding:6px 10px;font-size:12px;margin:0 8px 8px 0}
     .hr{height:1px;background:#1a1d24;margin:16px 0}
+
+    /* NEW: upload tile */
+    .dropzone{
+      position:relative; display:flex; align-items:center; justify-content:center;
+      min-height:180px; border:1px dashed #2a2e3a; border-radius:14px; background:#0b0f18; cursor:pointer;
+      transition: border-color .15s ease, background .15s ease;
+    }
+    .dropzone:hover{ border-color:#3a4152; background:#0c1220; }
+    .dropzone.drag{ border-color:#00e5ff; background:#0b1522; box-shadow:0 0 0 2px rgba(0,229,255,.15) inset; }
+    .dz-inner{ text-align:center; color:#cfe2ff; }
+    .dz-inner .big{ font-weight:800; font-size:15px; }
+    .dz-inner .small{ font-size:12px; color:#9fb0c8; margin-top:6px; }
+    .progress-row{ display:flex; align-items:center; gap:10px; margin-top:10px; }
+    .progress{ height:6px; background:#182030; border-radius:999px; overflow:hidden; width:100%; }
+    .progress .in{ height:100%; width:0%; background:linear-gradient(90deg,#9cf,#9f9); transition:width .15s ease; }
+    .status{ font-size:12px; color:#9fb0c8; }
+    .hidden{ display:none; }
   </style>
 
   <script type="importmap">
@@ -80,7 +97,7 @@
       <div class="card-head">
         <h2>Project Overview</h2>
         <div class="right">
-          <button class="btn" type="button" id="uploadBtn">Upload FITS</button>
+          <a class="btn" href="#upload" style="text-decoration:none">Upload FITS</a>
           <a class="btn" href="#how" style="text-decoration:none">How it works</a>
         </div>
       </div>
@@ -98,14 +115,24 @@
           <p class="small-muted" style="margin-top:8px">KPIs auto-wire once the backend publishes dataset index counts.</p>
         </div>
 
-        <div class="note">
-          <h3>Quick actions</h3>
-          <p><b>1)</b> <a href="#upload" id="uploadLink">Upload a FITS</a> (Kepler/TESS) — we’ll process on the backend and notify when ready.</p>
-          <p><b>2)</b> Try the live orbit sim below (placeholder values). Hook it to your job payload when ready.</p>
-          <div class="pill">Phase-folded curve</div>
-          <div class="pill">BLS period &amp; t0</div>
-          <div class="pill">Transit depth &amp; SNR</div>
-          <div class="pill">20s / 2m cadence aware</div>
+        <!-- ====== NEW: Upload tile ====== -->
+        <div class="note" id="upload">
+          <h3>Upload a FITS</h3>
+          <div id="dz" class="dropzone">
+            <div class="dz-inner">
+              <div class="big">Click to select or drop a <span class="mono">.fits</span> file</div>
+              <div class="small">Kepler/TESS light-curve FITS • uploads directly to GCS via signed URL</div>
+              <input id="fileInput" type="file" accept=".fits,.fit" class="hidden" />
+              <div class="progress-row hidden" id="progRow">
+                <div class="progress"><div class="in" id="progIn"></div></div>
+                <div class="status" id="progText">0%</div>
+              </div>
+              <div class="small hidden" id="afterText"></div>
+            </div>
+          </div>
+          <div class="small-muted" style="margin-top:8px">
+            After upload, processing runs in the cloud (detrend → BLS → phase-fold). We’ll show a job status if available.
+          </div>
         </div>
       </div>
     </div>
@@ -195,7 +222,7 @@
       </div>
     </div>
 
-    <!-- ====== NEW: Model status & recent runs ====== -->
+    <!-- ====== Model status & recent runs ====== -->
     <div class="grid section">
       <div class="note">
         <h3>Model status</h3>
@@ -213,39 +240,168 @@
         <div id="recentList" class="small-muted">No jobs yet.</div>
       </div>
     </div>
-
-    <!-- ====== NEW: FAQ ====== -->
-    <div class="card section">
-      <div class="card-head"><h2>FAQ</h2></div>
-      <div style="padding:14px">
-        <p><b>How long does a run take?</b> Typical FITS finish in ~2–4 minutes end-to-end (I/O + BLS dominate).</p>
-        <p><b>What missions are supported?</b> Kepler (KIC) and TESS (TIC) light-curves; cadence-aware (20s &amp; 2m).</p>
-        <p><b>What do I need to upload?</b> A single light-curve FITS per run. We parse headers for IDs automatically.</p>
-      </div>
-    </div>
   </div>
 
 <script type="module">
+  /* ====================== Upload plumbing ====================== */
+
+  // Update these to your deployed endpoints:
+  const GET_UPLOAD_URL = 'https://us-central1-silent-suns.cloudfunctions.net/get_upload_url';
+  // Optional job status endpoint (if you expose one): `${JOB_STATUS_BASE}/${job_id}`
+  const JOB_STATUS_BASE = 'https://us-central1-silent-suns.cloudfunctions.net/jobs';
+
+  const dz = document.getElementById('dz');
+  const fileInput = document.getElementById('fileInput');
+  const progRow = document.getElementById('progRow');
+  const progIn = document.getElementById('progIn');
+  const progText = document.getElementById('progText');
+  const afterText = document.getElementById('afterText');
+
+  const setProg = (pct)=> {
+    const v = Math.max(0, Math.min(100, pct|0));
+    progIn.style.width = v + '%';
+    progText.textContent = v + '%';
+  };
+  const show = (el, yes)=> el.classList.toggle('hidden', !yes);
+
+  dz.addEventListener('click', ()=> fileInput.click());
+  dz.addEventListener('dragover', (e)=>{ e.preventDefault(); dz.classList.add('drag'); });
+  dz.addEventListener('dragleave', ()=> dz.classList.remove('drag'));
+  dz.addEventListener('drop', (e)=>{
+    e.preventDefault(); dz.classList.remove('drag');
+    const f = e.dataTransfer?.files?.[0];
+    if (f) handleFile(f);
+  });
+  fileInput.addEventListener('change', ()=>{
+    const f = fileInput.files?.[0];
+    if (f) handleFile(f);
+  });
+
+  function human(n){
+    const u = ['B','KB','MB','GB']; let i=0, x=n;
+    while (x>=1024 && i<u.length-1){ x/=1024; i++; }
+    return x.toFixed(x<10?1:0) + ' ' + u[i];
+  }
+
+  async function handleFile(file){
+    afterText.textContent = '';
+    show(afterText,false);
+    show(progRow,true);
+    setProg(0);
+
+    // basic checks
+    const name = file.name || 'upload.fits';
+    const okExt = /\.(fits?|FITS?)$/.test(name);
+    if (!okExt){
+      show(progRow,false);
+      alert('Please upload a .fits file');
+      return;
+    }
+
+    // 1) Ask backend for a signed URL
+    let signedUrl, jobId, objectPath;
+    try{
+      const body = { filename: name, contentType: file.type || 'application/fits' };
+      const r = await fetch(GET_UPLOAD_URL, {
+        method:'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify(body)
+      });
+      if(!r.ok) throw new Error('get_upload_url failed: ' + r.status);
+      const data = await r.json();
+
+      // tolerate different key names
+      signedUrl = data.signed_url || data.signedUrl || data.uploadUrl || data.url;
+      jobId     = data.job_id     || data.jobId;
+      objectPath= data.object_path|| data.objectPath || data.gcsPath;
+
+      if(!signedUrl) throw new Error('No signed URL in response');
+    }catch(err){
+      show(progRow,false);
+      alert('Could not request upload URL: ' + (err?.message || err));
+      return;
+    }
+
+    // 2) Upload file to the signed URL (XHR for progress)
+    try{
+      await uploadWithProgress(signedUrl, file, file.type || 'application/fits', (pct)=> setProg(pct));
+    }catch(err){
+      show(progRow,false);
+      alert('Upload failed: ' + (err?.message || err));
+      return;
+    }
+
+    setProg(100);
+    show(afterText,true);
+    afterText.textContent = 'Uploaded ' + name + ' (' + human(file.size) + '). Processing…';
+
+    // 3) Optional: poll job status if we have an id
+    if (jobId && JOB_STATUS_BASE){
+      pollJob(jobId, (status)=>{
+        if (status.state === 'done'){
+          afterText.innerHTML = `✅ Done — <a href="${status.curve_csv}" target="_blank">curve CSV</a> · <a href="${status.features_json}" target="_blank">features JSON</a> ${status.plot_png ? '· <a href="'+status.plot_png+'" target="_blank">plot</a>':''}`;
+          show(progRow,false);
+        } else if (status.state === 'error'){
+          afterText.textContent = '❌ Processing error: ' + (status.error || 'unknown');
+          show(progRow,false);
+        } else {
+          // still running; keep progress showing
+        }
+      });
+    } else {
+      // No job endpoint — just leave the "Processing…" message.
+    }
+  }
+
+  function uploadWithProgress(url, file, contentType, onProgress){
+    return new Promise((resolve, reject)=>{
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', url, true);
+      if (contentType) xhr.setRequestHeader('Content-Type', contentType);
+      xhr.upload.onprogress = (e)=>{
+        if (e.lengthComputable){
+          const pct = Math.round((e.loaded / e.total) * 100);
+          onProgress?.(pct);
+        }
+      };
+      xhr.onload = ()=> (xhr.status >= 200 && xhr.status < 300) ? resolve() : reject(new Error('HTTP '+xhr.status));
+      xhr.onerror = ()=> reject(new Error('Network error'));
+      xhr.send(file);
+    });
+  }
+
+  function pollJob(jobId, onUpdate){
+    const url = `${JOB_STATUS_BASE}/${encodeURIComponent(jobId)}`;
+    let tries = 0, timer = null;
+    const step = async ()=>{
+      tries++;
+      try{
+        const r = await fetch(url, {cache:'no-cache'});
+        if (r.ok){
+          const s = await r.json();
+          onUpdate?.(s);
+          if (s.state === 'done' || s.state === 'error'){ clearInterval(timer); }
+        } else {
+          if (tries % 5 === 0) console.warn('job poll HTTP', r.status);
+        }
+      }catch(e){
+        if (tries % 5 === 0) console.warn('job poll err', e);
+      }
+    };
+    timer = setInterval(step, 2500);
+    step();
+  }
+
+  // KPI placeholders (optional)
+  const setText = (id, val)=>{ const el=document.getElementById(id); if(el) el.textContent = val; };
+  setText('kpiSamples','—'); setText('kpiPos','—'); setText('kpiNeg','—');
+
+  /* ====================== ORBIT SIM (unchanged) ====================== */
   import * as THREE from 'three';
   import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
   import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
   import { CSS2DRenderer } from 'https://unpkg.com/three@0.160.0/examples/jsm/renderers/CSS2DRenderer.js';
 
-  // ---- small UX bits (upload stub + KPI placeholders) ----
-  document.getElementById('uploadBtn')?.addEventListener('click', ()=>{
-    // Replace with your signed-URL flow
-    alert('Upload flow coming soon: we will request a signed URL, PUT the FITS, and show job status.');
-  });
-  document.getElementById('uploadLink')?.addEventListener('click', (e)=>{ e.preventDefault(); document.getElementById('uploadBtn').click(); });
-
-  // Optional: hydrate KPIs from a JSON endpoint later
-  const fallbackKPIs = { samples:'—', pos:'—', neg:'—' };
-  const setText = (id, val)=>{ const el=document.getElementById(id); if(el) el.textContent = val; };
-  setText('kpiSamples', fallbackKPIs.samples);
-  setText('kpiPos', fallbackKPIs.pos);
-  setText('kpiNeg', fallbackKPIs.neg);
-
-  /* ====================== ORBIT SIM (unchanged core) ====================== */
   const received = { tic:261136679, spectral_type:"A", period_days:5.4321, t0_btjd:134.5342, semi_major_axis_scene:1.4, planet_radius_scene:0.25, star_radius_scene:0.7 };
   const MIN_ORBIT_MULT = 8;
   if (received.semi_major_axis_scene < MIN_ORBIT_MULT * received.star_radius_scene) {
@@ -404,7 +560,7 @@
       starReal.traverse(o=>{ if (o.isMesh && o.material) o.material.opacity = realOpacity; });
       planetReal.traverse(o=>{ if (o.isMesh && o.material) o.material.opacity = realOpacity; });
       starPH.visible = (1 - reveal) > 0.02; planetPH.visible = (1 - reveal) > 0.02;
-      currentBlur = Math.max(0, currentBlur - 0.6); applyBlur(currentBlur);
+      applyBlur(Math.max(0, (1-reveal)*10));
       if (reveal === 1){ document.getElementById('hud').style.display='none'; applyBlur(0); }
     }
 
@@ -412,7 +568,8 @@
     renderer.render(scene, camera);
     labelRenderer.render(scene, camera);
   }
-  applyBlur(currentBlur);
+  function applyBlur(px){ renderer.domElement.style.filter = `blur(${px}px)`; }
+  applyBlur(10);
   animateOrbit(0);
 
   addEventListener('resize', sizeToPanel);
@@ -428,9 +585,8 @@
     else if (e.key === ']') { SIM_SPEED_DAYS_PER_SEC = Math.min(1e3, SIM_SPEED_DAYS_PER_SEC * 1.5); smallEl.textContent = `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s (faster)`; }
     else if (e.code === 'Space') { paused = !paused; smallEl.textContent = paused ? 'Paused' : `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s`; }
   });
-  setProgress(5);
 
-  /* ====================== EARTH VIEWER (unchanged core) ====================== */
+  /* ====================== EARTH VIEWER (unchanged) ====================== */
   (function initEarthViewer(){
     const panel   = document.getElementById('earthPanel');
     const fsBtn   = document.getElementById('earthFsBtn');
@@ -499,7 +655,6 @@
 
     function getEarthRadiusLocal(){ return 1.0; }
 
-    // Africa calibration + orientation helpers
     function toGlobe(lat, lon) {
       return { lat: lat - 7, lon: ((lon + 80 + 180) % 360) - 180 };
     }
