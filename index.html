@@ -11,7 +11,7 @@
     /* HUD */
     #hud{position:absolute;inset:0;pointer-events:none;display:flex;align-items:flex-start;justify-content:center}
     #panel{margin-top:14px;background:rgba(0,0,0,.55);backdrop-filter:saturate(140%) blur(6px);
-           border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.4;max-width:420px}
+           border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.4;max-width:460px}
     #bar{height:4px;background:rgba(255,255,255,.15);border-radius:2px;overflow:hidden;margin-top:6px}
     #fill{height:100%;width:0%;background:linear-gradient(90deg,#9cf,#9f9);transition:width .15s ease}
     #small{opacity:.85;font-size:11px;color:#ddd}
@@ -26,6 +26,7 @@
       font:600 12px/1.2 system-ui, sans-serif;color:#fff;pointer-events:none;
       transform:translate(-50%,-120%);white-space:nowrap
     }
+    .kbd{background:#222;border:1px solid #333;border-radius:4px;padding:1px 4px}
   </style>
 
   <!-- Import map so "three" works in-browser -->
@@ -41,7 +42,13 @@
 <div id="hud">
   <div id="panel">
     <div><b>Loading scene…</b> <span id="pct">0%</span></div>
-    <div id="small">Preparing lights & placeholders…</div>
+    <div id="small">
+      Preparing lights & placeholders…<br>
+      <span style="opacity:.9">Controls:</span>
+      <span class="kbd">[</span> slower,
+      <span class="kbd">]</span> faster,
+      <span class="kbd">Space</span> pause
+    </div>
     <div id="bar"><div id="fill"></div></div>
   </div>
 </div>
@@ -57,16 +64,24 @@
   // -----------------------
   const received = {
     tic: 261136679,
-    spectral_type: "K",          // one of: K/M -> red.glb, G/F -> yellow.glb, A/B -> blue.glb
+    spectral_type: "K",          // K/M -> red.glb, G/F -> yellow.glb, A/B -> blue.glb
     period_days: 5.4321,         // orbital period
     t0_btjd: 134.5342,           // mid-transit reference (BTJD)
-    semi_major_axis_scene: 1.4,  // orbit radius in scene units
-    planet_radius_scene: 0.25,   // how big to draw the planet (scene units)
-    star_radius_scene: 0.7       // how big to draw the star (scene units)
+    semi_major_axis_scene: 1.4,  // orbit radius in scene units (will be clamped against star size below)
+    planet_radius_scene: 0.25,   // planet draw radius (scene units)
+    star_radius_scene: 0.7       // star draw radius (scene units)
   };
 
+  // Ensure orbit radius isn't too small vs star size (prevents collisions)
+  const MIN_ORBIT_MULT = 8; // try 8–10 for comfy spacing
+  if (received.semi_major_axis_scene < MIN_ORBIT_MULT * received.star_radius_scene) {
+    console.warn('[viz] Orbit too tight; expanding to avoid overlap.');
+    received.semi_major_axis_scene = MIN_ORBIT_MULT * received.star_radius_scene;
+  }
+
   // Simulation: how many *Earth days* advance per real second (visualization speed)
-  const SIM_SPEED_DAYS_PER_SEC = 8;
+  let SIM_SPEED_DAYS_PER_SEC = 1.25; // slower default so motion reads clearly
+  let paused = false;
 
   // -----------------------
   // UI helpers
@@ -146,8 +161,7 @@
     const t = (s || '').toUpperCase();
     if (t.startsWith('K') || t.startsWith('M')) return './red.glb';
     if (t.startsWith('G') || t.startsWith('F')) return './yellow.glb';
-    // default hot bucket for A/B (and anything unknown)
-    return './blue.glb';
+    return './blue.glb'; // default hot bucket for A/B/unknown
   }
 
   // -----------------------
@@ -159,10 +173,7 @@
     setProgress(p);
     applyBlur(10 * (1 - p/100));
   };
-  manager.onLoad = () => {
-    setProgress(100);
-    // blur will be eased to 0 in the reveal loop
-  };
+  manager.onLoad = () => { setProgress(100); };
 
   const loader = new GLTFLoader(manager);
 
@@ -182,7 +193,11 @@
     sunPathForSpectral(received.spectral_type),
     (gltf)=>{
       starReal = gltf.scene;
-      starReal.scale.setScalar(received.star_radius_scene / 0.5); // normalize if model radius ≈0.5; adjust if needed
+
+      // If your star model is around unit scale, setScalar(star_radius_scene) is fine.
+      // If it’s much smaller/larger, tweak this normalization factor.
+      starReal.scale.setScalar(received.star_radius_scene);
+
       starReal.traverse(o=>{
         if (o.isMesh && o.material){
           o.material = o.material.clone();
@@ -204,7 +219,7 @@
     './planet.glb',
     (gltf)=>{
       planetReal = gltf.scene;
-      planetReal.scale.setScalar(received.planet_radius_scene); // assume unit sphere inside the GLB
+      planetReal.scale.setScalar(received.planet_radius_scene);
       planetReal.position.copy(planetPH.position);
       planetReal.traverse(o=>{
         if (o.isMesh && o.material){
@@ -237,7 +252,7 @@
   function stepSim(nowMs){
     const dt = (nowMs - lastT) / 1000;
     lastT = nowMs;
-    simDays += dt * SIM_SPEED_DAYS_PER_SEC;
+    if (!paused) simDays += dt * SIM_SPEED_DAYS_PER_SEC;
   }
 
   function orbitAngle(period_days, t0_btjd, current_btjd){
@@ -267,7 +282,7 @@
     if (starReal)   starReal.rotation.y   += 0.005;
     if (planetReal) planetReal.rotation.y += 0.01;
 
-    // orbit
+    // orbit (xz-plane)
     const R = received.semi_major_axis_scene;
     const ang = orbitAngle(received.period_days, received.t0_btjd, currentBTJD());
     const x = Math.cos(ang) * R;
@@ -277,7 +292,7 @@
     if (planetReal) planetReal.position.set(x, y, z);
 
     // label text
-    lbl.textContent = `${simDays.toFixed(1)} d`;
+    lbl.textContent = `${simDays.toFixed(2)} d`;
 
     // crossfade placeholders -> real; finish blur-down
     if (reveal > 0 && starReal && planetReal){
@@ -314,6 +329,22 @@
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
     labelRenderer.setSize(innerWidth, innerHeight);
+  });
+
+  // -----------------------
+  // Keyboard controls: [ slower, ] faster, Space pause
+  // -----------------------
+  addEventListener('keydown', (e)=>{
+    if (e.key === '[') {
+      SIM_SPEED_DAYS_PER_SEC = Math.max(0.01, SIM_SPEED_DAYS_PER_SEC / 1.5);
+      smallEl.textContent = `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s (slower)`;
+    } else if (e.key === ']') {
+      SIM_SPEED_DAYS_PER_SEC = Math.min(1e3, SIM_SPEED_DAYS_PER_SEC * 1.5);
+      smallEl.textContent = `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s (faster)`;
+    } else if (e.code === 'Space') {
+      paused = !paused;
+      smallEl.textContent = paused ? 'Paused' : `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s`;
+    }
   });
 
   // start progress non-zero so bar isn’t empty on cache
