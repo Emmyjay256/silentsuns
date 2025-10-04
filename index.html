@@ -3,59 +3,128 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>TESS Orbit Viz — Progress Arc + Days Counter</title>
+  <title>Silent Planets — TESS Orbit Viz</title>
   <style>
+    :root{
+      --bg:#0b0b0b; --ink:#fff; --muted:#cfd3dc; --card:#111318; --glass:rgba(0,0,0,.55);
+      --accent:#00e5ff;
+    }
     html,body{height:100%}
-    body{margin:0;overflow:hidden;background:#0b0b0b;color:#fff;font-family:system-ui}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,Segoe UI,Roboto,Inter,Arial}
+    a{color:#9cf}
 
-    /* HUD */
-    #hud{position:absolute;inset:0;pointer-events:none;display:flex;align-items:flex-start;justify-content:center}
-    #panel{margin-top:14px;background:rgba(0,0,0,.55);backdrop-filter:saturate(140%) blur(6px);
-           border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.4;max-width:520px}
-    #bar{height:4px;background:rgba(255,255,255,.15);border-radius:2px;overflow:hidden;margin-top:6px}
-    #fill{height:100%;width:0%;background:linear-gradient(90deg,#9cf,#9f9);transition:width .15s ease}
-    #small{opacity:.85;font-size:11px;color:#ddd}
+    /* Page layout */
+    .wrap{max-width:1100px;margin:0 auto;padding:28px 16px 64px}
+    h1{font-size:38px;line-height:1.1;margin:0 0 8px}
+    .lead{color:var(--muted);margin:0 0 20px}
 
-    /* canvas blur dialed down as we load */
-    canvas{display:block;filter:blur(10px)}
-    .hidden{display:none}
+    /* Sim card */
+    .card{
+      background:var(--card);
+      border:1px solid #1a1d24;
+      border-radius:16px;
+      box-shadow:0 6px 24px rgba(0,0,0,.35);
+      overflow:hidden;
+    }
+    .card-head{
+      display:flex;align-items:center;justify-content:space-between;
+      padding:10px 12px;border-bottom:1px solid #1a1d24;background:#0e1016;
+    }
+    .card-head h2{margin:0;font-size:16px;font-weight:700}
+    .card-head .right{display:flex;gap:8px;align-items:center}
+    .btn{
+      appearance:none;border:1px solid #2a2e3a;background:#131721;color:#eaf6ff;cursor:pointer;
+      padding:8px 12px;border-radius:10px;font-weight:700;font-size:12px;letter-spacing:.3px;
+    }
+    .btn:hover{background:#0f1420}
+    .hint{font-size:12px;color:#9fb0c8}
 
-    /* CSS2D label (above planet) */
+    /* Sim panel (relative container for canvas + overlays) */
+    .sim-panel{
+      position:relative;width:100%;height:60vh;min-height:380px; /* not full page */
+      background:#0a0c11;
+    }
+
+    /* Overlays pinned INSIDE sim panel (so they follow fullscreen too) */
+    .overlay{
+      position:absolute;inset:0;pointer-events:none;display:flex;align-items:flex-start;justify-content:center
+    }
+    .panel{
+      margin-top:14px;background:var(--glass);backdrop-filter:saturate(140%) blur(6px);
+      border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.4;max-width:520px
+    }
+    .bar{height:4px;background:rgba(255,255,255,.15);border-radius:2px;overflow:hidden;margin-top:6px}
+    .fill{height:100%;width:0%;background:linear-gradient(90deg,#9cf,#9f9);transition:width .15s ease}
+    .small{opacity:.85;font-size:11px;color:#ddd}
+    .kbd{background:#222;border:1px solid #333;border-radius:4px;padding:1px 4px}
+
+    /* Days HUD (top-right inside sim panel) */
+    #daysHUD{
+      position:absolute;top:12px;right:12px;pointer-events:none;
+      font-weight:800;font-size:28px;line-height:1;color:var(--accent);
+      text-shadow:0 0 10px rgba(0,229,255,.35);
+    }
+    #daysHUD small{font-weight:600;font-size:12px;opacity:.8;display:block}
+
+    /* Canvas blur dialed down as we load (we attach canvas into .sim-panel) */
+    .sim-panel canvas{display:block;filter:blur(10px)}
+
+    /* CSS2D label above planet */
     .label{
       padding:4px 6px;border-radius:6px;background:rgba(0,0,0,.55);
       font:600 12px/1.2 system-ui, sans-serif;color:#fff;pointer-events:none;
       transform:translate(-50%,-120%);white-space:nowrap
     }
-    .kbd{background:#222;border:1px solid #333;border-radius:4px;padding:1px 4px}
 
-    /* Big corner days counter (same color as tube) */
-    #daysHUD{
-      position:absolute;top:14px;right:16px;pointer-events:none;
-      font-weight:800;font-size:28px;line-height:1;color:#00e5ff;
-      text-shadow:0 0 10px rgba(0,229,255,.35);
-    }
-    #daysHUD small{font-weight:600;font-size:12px;opacity:.8;display:block}
+    /* Below content placeholder */
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:18px}
+    .note{background:#0e1016;border:1px solid #1a1d24;border-radius:12px;padding:14px;color:#cfe2ff}
   </style>
 
+  <!-- Import map so "three" works in-browser -->
   <script type="importmap">
-  { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+  {
+    "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" }
+  }
   </script>
 </head>
 <body>
-<div id="hud">
-  <div id="panel">
-    <div><b>Loading scene…</b> <span id="pct">0%</span></div>
-    <div id="small">
-      Preparing lights & placeholders…<br>
-      <span style="opacity:.9">Controls:</span>
-      <span class="kbd">[</span> slower,
-      <span class="kbd">]</span> faster,
-      <span class="kbd">Space</span> pause
+  <div class="wrap">
+    <h1>Silent Planets</h1>
+    <p class="lead">TESS transit candidates rendered as orbits. Choose Fullscreen when you’re ready to present.</p>
+
+    <!-- Simulation Card -->
+    <div class="card">
+      <div class="card-head">
+        <h2>Orbit Simulation</h2>
+        <div class="right">
+          <span class="hint">Controls: <span class="kbd">[</span> slower, <span class="kbd">]</span> faster, <span class="kbd">Space</span> pause</span>
+          <button id="fsBtn" class="btn" type="button">Enter Fullscreen</button>
+        </div>
+      </div>
+
+      <div id="sim" class="sim-panel">
+        <!-- Progress HUD (center-top) -->
+        <div class="overlay" id="hud">
+          <div class="panel">
+            <div><b>Loading scene…</b> <span id="pct">0%</span></div>
+            <div class="small" id="small">Preparing lights &amp; placeholders…</div>
+            <div class="bar"><div class="fill" id="fill"></div></div>
+          </div>
+        </div>
+
+        <!-- Days HUD (top-right) -->
+        <div id="daysHUD"><small>elapsed (per orbit)</small><span id="daysText">0.00 d</span></div>
+        <!-- WebGL canvas + CSS2D canvas will be appended here -->
+      </div>
     </div>
-    <div id="bar"><div id="fill"></div></div>
+
+    <!-- Below content (you can replace later) -->
+    <div class="grid">
+      <div class="note">Hook this to your backend payload. We’ll map <b>TIC</b>, <b>period</b>, <b>t0 (BTJD)</b>, and star type to the viz.</div>
+      <div class="note">Add more sections here (model status, latest detections, controls, etc.).</div>
+    </div>
   </div>
-</div>
-<div id="daysHUD"><small>elapsed (per orbit)</small><span id="daysText">0.00 d</span></div>
 
 <script type="module">
   import * as THREE from 'three';
@@ -63,82 +132,78 @@
   import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
   import { CSS2DRenderer, CSS2DObject } from 'https://unpkg.com/three@0.160.0/examples/jsm/renderers/CSS2DRenderer.js';
 
-  // -----------------------
-  // HARD-CODED RECEIVED DATA (replace with backend payload later)
-  // -----------------------
+  // ---------- HARD-CODED RECEIVED DATA (swap later) ----------
   const received = {
     tic: 261136679,
     spectral_type: "K",          // K/M -> red.glb, G/F -> yellow.glb, A/B -> blue.glb
-    period_days: 5.4321,         // orbital period
-    t0_btjd: 134.5342,           // mid-transit reference (BTJD)
-    semi_major_axis_scene: 1.4,  // orbit radius in scene units (will be clamped)
-    planet_radius_scene: 0.25,   // planet size (scene units)
-    star_radius_scene: 0.7       // star size (scene units)
+    period_days: 5.4321,
+    t0_btjd: 134.5342,
+    semi_major_axis_scene: 1.4,
+    planet_radius_scene: 0.25,
+    star_radius_scene: 0.7
   };
 
-  // Enforce safe orbit spacing so it never intersects the star
+  // Safe spacing
   const MIN_ORBIT_MULT = 8;
   if (received.semi_major_axis_scene < MIN_ORBIT_MULT * received.star_radius_scene) {
-    console.warn('[viz] Orbit too tight; expanding to avoid overlap.');
     received.semi_major_axis_scene = MIN_ORBIT_MULT * received.star_radius_scene;
   }
 
-  // Simulation speed (Earth days per real second)
-  let SIM_SPEED_DAYS_PER_SEC = 1.0;  // calm default
+  let SIM_SPEED_DAYS_PER_SEC = 1.0;
   let paused = false;
 
-  // -----------------------
-  // UI helpers
-  // -----------------------
+  // ---------- DOM refs inside sim panel ----------
+  const simPanel = document.getElementById('sim');
+  const fsBtn = document.getElementById('fsBtn');
   const pctEl = document.getElementById('pct');
   const fillEl = document.getElementById('fill');
   const smallEl = document.getElementById('small');
-  const panelEl = document.getElementById('panel');
   const daysText = document.getElementById('daysText');
+
   const setProgress = (p)=>{ const v=Math.max(0,Math.min(100,p)); pctEl.textContent = v.toFixed(0)+'%'; fillEl.style.width = v+'%'; };
 
-  // -----------------------
-  // Scene / camera / renderers
-  // -----------------------
+  // ---------- Scene / camera / renderers (mounted INSIDE simPanel) ----------
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0b0b0b);
 
-  const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
+  const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 1000);
   camera.position.set(0, 1.2, 3.2);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
   else renderer.outputEncoding = THREE.sRGBEncoding;
-  renderer.setSize(innerWidth, innerHeight);
-  document.body.appendChild(renderer.domElement);
+  simPanel.appendChild(renderer.domElement);
 
   const labelRenderer = new CSS2DRenderer();
-  labelRenderer.setSize(innerWidth, innerHeight);
   labelRenderer.domElement.style.position = 'absolute';
   labelRenderer.domElement.style.inset = '0';
   labelRenderer.domElement.style.pointerEvents = 'none';
-  document.body.appendChild(labelRenderer.domElement);
+  simPanel.appendChild(labelRenderer.domElement);
+
+  // size to panel
+  function sizeToPanel(){
+    const w = simPanel.clientWidth, h = simPanel.clientHeight;
+    camera.aspect = w / h; camera.updateProjectionMatrix();
+    renderer.setSize(w, h, false);
+    labelRenderer.setSize(w, h);
+  }
+  sizeToPanel();
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
 
-  // -----------------------
-  // Lights
-  // -----------------------
+  // ---------- Lights ----------
   const key   = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set( 5, 5,  5);
   const fill  = new THREE.DirectionalLight(0xffffff, 0.55); fill.position.set(-5, 2,  5);
   const back  = new THREE.DirectionalLight(0xffffff, 0.75); back.position.set( 0, 5, -6);
   const amb   = new THREE.AmbientLight(0xffffff, 0.2);
   scene.add(key, fill, back, amb);
 
-  // -----------------------
-  // Placeholders (instant)
-  // -----------------------
+  // ---------- Placeholders ----------
   const placeholderStarMat = new THREE.MeshStandardMaterial({
     color: 0xffcc66, emissive: 0xffaa33, emissiveIntensity: 0.6, roughness: 0.6, metalness: 0.0
   });
   const starPH = new THREE.Mesh(new THREE.SphereGeometry(received.star_radius_scene, 48, 24), placeholderStarMat);
-  starPH.name = 'starPH';
   scene.add(starPH);
 
   const planetPH = new THREE.Mesh(
@@ -146,10 +211,9 @@
     new THREE.MeshStandardMaterial({ color: 0xffe199, emissive: 0xffcc66, emissiveIntensity: 0.7, roughness: 0.5 })
   );
   planetPH.position.set(received.semi_major_axis_scene, 0, 0);
-  planetPH.name = 'planetPH';
   scene.add(planetPH);
 
-  // Label that follows the planet (ALWAYS above it → big offset)
+  // Label above planet
   const lbl = document.createElement('div');
   lbl.className = 'label';
   lbl.textContent = '0.00 d';
@@ -159,21 +223,17 @@
 
   smallEl.textContent = 'Placeholders visible… loading GLB models';
 
-  // -----------------------
-  // Choose sun model by spectral type
-  // -----------------------
+  // ---------- Sun by spectral type ----------
   function sunPathForSpectral(s) {
     const t = (s || '').toUpperCase();
     if (t.startsWith('K') || t.startsWith('M')) return './red.glb';
     if (t.startsWith('G') || t.startsWith('F')) return './yellow.glb';
-    return './blue.glb'; // A/B/unknown
+    return './blue.glb';
   }
 
-  // -----------------------
-  // Loading manager
-  // -----------------------
+  // ---------- Loading manager ----------
   const manager = new THREE.LoadingManager();
-  manager.onProgress = (url, loaded, total) => {
+  manager.onProgress = (_url, loaded, total) => {
     const p = total ? (loaded/total)*100 : 50;
     setProgress(p);
     applyBlur(10 * (1 - p/100));
@@ -182,83 +242,49 @@
 
   const loader = new GLTFLoader(manager);
 
-  // Canvas blur control
+  // Panel-local canvas blur
   let currentBlur = 10;
   function applyBlur(px){ renderer.domElement.style.filter = `blur(${px}px)`; }
 
-  // -----------------------
-  // Load GLBs
-  // -----------------------
-  let starReal = null;
-  let planetReal = null;
-  let reveal = 0; // 0..1
+  // ---------- Load GLBs ----------
+  let starReal = null, planetReal = null, reveal = 0;
 
-  // Star
   loader.load(
     sunPathForSpectral(received.spectral_type),
     (gltf)=>{
       starReal = gltf.scene;
       starReal.scale.setScalar(received.star_radius_scene);
-      starReal.traverse(o=>{
-        if (o.isMesh && o.material){
-          o.material = o.material.clone();
-          o.material.transparent = true;
-          o.material.opacity = 0;
-        }
-      });
+      starReal.traverse(o=>{ if (o.isMesh && o.material){ o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0; }});
       scene.add(starReal);
       smallEl.textContent = 'Sun model loaded…';
       reveal = Math.max(reveal, 0.001);
-    },
-    undefined,
-    (err)=> smallEl.textContent = 'Sun load error: '+(err?.message||err)
+    }
   );
 
-  // Planet
   loader.load(
     './planet.glb',
     (gltf)=>{
       planetReal = gltf.scene;
       planetReal.scale.setScalar(received.planet_radius_scene);
       planetReal.position.copy(planetPH.position);
-      planetReal.traverse(o=>{
-        if (o.isMesh && o.material){
-          o.material = o.material.clone();
-          o.material.transparent = true;
-          o.material.opacity = 0;
-        }
-      });
+      planetReal.traverse(o=>{ if (o.isMesh && o.material){ o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0; }});
       scene.add(planetReal);
-
-      // Move label from placeholder to the real planet (keep offset)
       if (lblObj.parent) lblObj.parent.remove(lblObj);
       planetReal.add(lblObj);
       lblObj.position.set(0, received.planet_radius_scene * 1.6, 0);
-
       smallEl.textContent = 'Planet model loaded…';
       reveal = Math.max(reveal, 0.001);
-    },
-    undefined,
-    (err)=> smallEl.textContent = 'Planet load error: '+(err?.message||err)
+    }
   );
 
-  // -----------------------
-  // Progress Tube (growing orbital arc)
-  // -----------------------
-  // Tube color (match HUD)
+  // ---------- Progress Tube (growing arc) ----------
   const TUBE_COLOR = 0x00e5ff;
   const tubeMaterial = new THREE.MeshBasicMaterial({ color: TUBE_COLOR, transparent: true, opacity: 0.95 });
+  let progressMesh = null, arcStartTheta = null, lastTheta = null, orbitStartSimDays = 0;
 
-  let progressMesh = null;
-  let arcStartTheta = null;        // where current arc started (radians)
-  let lastTheta = null;            // last angle to detect wrap
-  let orbitStartSimDays = 0;       // simDays when this orbit started
-
-  // Build/replace the arc geometry from start to end angle (in radians)
   function updateProgressArc(R, startTheta, endTheta) {
-    // Ensure increasing; if end < start we reset externally (don’t draw across wrap)
     const delta = endTheta - startTheta;
-    const steps = Math.max(8, Math.ceil(128 * (delta / (Math.PI * 2)))); // proportional detail
+    const steps = Math.max(8, Math.ceil(128 * (delta / (Math.PI * 2))));
     const pts = [];
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
@@ -267,88 +293,56 @@
     }
     const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.0);
     const tubularSegments = Math.max(24, steps * 3);
-    const tubeRadius = Math.max(0.01, received.planet_radius_scene * 0.05); // thin, scale with planet size
-    const radialSegments = 6;
-
-    const geom = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, radialSegments, false);
-
-    if (!progressMesh) {
-      progressMesh = new THREE.Mesh(geom, tubeMaterial);
-      progressMesh.renderOrder = 2; // draw on top if z-fighting
-      scene.add(progressMesh);
-    } else {
-      progressMesh.geometry.dispose();
-      progressMesh.geometry = geom;
-    }
+    const tubeRadius = Math.max(0.01, received.planet_radius_scene * 0.05);
+    const geom = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, 6, false);
+    if (!progressMesh) { progressMesh = new THREE.Mesh(geom, tubeMaterial); progressMesh.renderOrder = 2; scene.add(progressMesh); }
+    else { progressMesh.geometry.dispose(); progressMesh.geometry = geom; }
   }
 
-  // -----------------------
-  // Simulation time + orbit helpers
-  // -----------------------
-  let simDays = 0;
-  let lastT = performance.now();
+  // ---------- Sim time & orbit ----------
+  let simDays = 0, lastT = performance.now();
 
   function stepSim(nowMs){
-    const dt = (nowMs - lastT) / 1000;
-    lastT = nowMs;
+    const dt = (nowMs - lastT) / 1000; lastT = nowMs;
     if (!paused) simDays += dt * SIM_SPEED_DAYS_PER_SEC;
   }
-
+  const PI2 = Math.PI * 2;
   function orbitAngle(period_days, t0_btjd, current_btjd){
-    const ph = ((current_btjd - t0_btjd) / period_days) % 1;
-    const phase = ph < 0 ? ph + 1 : ph;
-    return phase * Math.PI * 2;
+    const ph = ((current_btjd - t0_btjd) / period_days) % 1; return (ph < 0 ? ph + 1 : ph) * PI2;
   }
+  const currentBTJD = ()=> received.t0_btjd + simDays;
 
-  function currentBTJD(){ return received.t0_btjd + simDays; }
-
-  // -----------------------
-  // Animate
-  // -----------------------
+  // ---------- Animate ----------
   function animate(tMs){
     requestAnimationFrame(animate);
     stepSim(tMs);
 
-    const t = tMs * 0.001;
-
-    // subtle star pulse + very slow spin
-    placeholderStarMat.emissiveIntensity = 0.6 + Math.sin(t*1.2)*0.04;
-    starPH.rotation.y += 0.001;
-    if (starReal) starReal.rotation.y += 0.001;
+    // subtle star pulse + slow spin
+    placeholderStarMat.emissiveIntensity = 0.6 + Math.sin(tMs*0.0012)*0.04;
+    starPH.rotation.y += 0.001; if (starReal) starReal.rotation.y += 0.001;
 
     // planet self-rotation
-    planetPH.rotation.y += 0.008;
-    if (planetReal) planetReal.rotation.y += 0.01;
+    planetPH.rotation.y += 0.008; if (planetReal) planetReal.rotation.y += 0.01;
 
-    // orbit (xz-plane)
+    // orbit
     const R = received.semi_major_axis_scene;
     const theta = orbitAngle(received.period_days, received.t0_btjd, currentBTJD());
-    const x = Math.cos(theta) * R;
-    const z = Math.sin(theta) * R;
-    planetPH.position.set(x, 0, z);
-    if (planetReal) planetReal.position.set(x, 0, z);
+    const x = Math.cos(theta) * R, z = Math.sin(theta) * R;
+    planetPH.position.set(x, 0, z); if (planetReal) planetReal.position.set(x, 0, z);
 
-    // initialize arc on first frame
+    // progress arc + orbit elapsed days (reset on wrap)
     if (arcStartTheta === null) {
-      arcStartTheta = theta;
-      lastTheta = theta;
-      orbitStartSimDays = simDays;
-      updateProgressArc(R, arcStartTheta, theta + 1e-6); // tiny stub
+      arcStartTheta = theta; lastTheta = theta; orbitStartSimDays = simDays;
+      updateProgressArc(R, arcStartTheta, theta + 1e-6);
     } else {
-      // detect wrap (theta decreased → new revolution)
-      if (theta < lastTheta) {
-        // reset arc for new orbit
-        arcStartTheta = theta;
-        orbitStartSimDays = simDays;
+      if (theta < lastTheta) { // wrapped
+        arcStartTheta = theta; orbitStartSimDays = simDays;
         updateProgressArc(R, arcStartTheta, theta + 1e-6);
       } else {
-        // extend arc
         updateProgressArc(R, arcStartTheta, theta);
       }
       lastTheta = theta;
     }
-
-    // label + HUD text (elapsed days in current orbit)
     const orbitElapsed = simDays - orbitStartSimDays;
     lbl.textContent = `${orbitElapsed.toFixed(2)} d`;
     daysText.textContent = `${orbitElapsed.toFixed(2)} d`;
@@ -359,17 +353,9 @@
       const realOpacity = reveal;
       starReal.traverse(o=>{ if (o.isMesh && o.material) o.material.opacity = realOpacity; });
       planetReal.traverse(o=>{ if (o.isMesh && o.material) o.material.opacity = realOpacity; });
-
-      starPH.visible   = (1 - reveal) > 0.02;
-      planetPH.visible = (1 - reveal) > 0.02;
-
-      currentBlur = Math.max(0, currentBlur - 0.6);
-      applyBlur(currentBlur);
-
-      if (reveal === 1){
-        panelEl.classList.add('hidden');
-        applyBlur(0);
-      }
+      starPH.visible = (1 - reveal) > 0.02; planetPH.visible = (1 - reveal) > 0.02;
+      currentBlur = Math.max(0, currentBlur - 0.6); applyBlur(currentBlur);
+      if (reveal === 1){ document.getElementById('hud').style.display='none'; applyBlur(0); }
     }
 
     controls.update();
@@ -379,33 +365,30 @@
   applyBlur(currentBlur);
   animate(0);
 
-  // -----------------------
-  // Resize
-  // -----------------------
-  addEventListener('resize', ()=>{
-    camera.aspect = innerWidth/innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth, innerHeight);
-    labelRenderer.setSize(innerWidth, innerHeight);
-  });
+  // ---------- Resize to panel & Fullscreen handling ----------
+  addEventListener('resize', sizeToPanel);
+  document.addEventListener('fullscreenchange', sizeToPanel);
 
-  // -----------------------
-  // Keyboard controls: [ slower, ] faster, Space pause
-  // -----------------------
-  addEventListener('keydown', (e)=>{
-    if (e.key === '[') {
-      SIM_SPEED_DAYS_PER_SEC = Math.max(0.01, SIM_SPEED_DAYS_PER_SEC / 1.5);
-      smallEl.textContent = `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s (slower)`;
-    } else if (e.key === ']') {
-      SIM_SPEED_DAYS_PER_SEC = Math.min(1e3, SIM_SPEED_DAYS_PER_SEC * 1.5);
-      smallEl.textContent = `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s (faster)`;
-    } else if (e.code === 'Space') {
-      paused = !paused;
-      smallEl.textContent = paused ? 'Paused' : `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s`;
+  // Fullscreen toggle (user-controlled)
+  fsBtn.addEventListener('click', async ()=>{
+    if (!document.fullscreenElement) {
+      await simPanel.requestFullscreen();
+      fsBtn.textContent = 'Exit Fullscreen';
+    } else {
+      await document.exitFullscreen();
+      fsBtn.textContent = 'Enter Fullscreen';
     }
+    sizeToPanel();
   });
 
-  // start progress non-zero so bar isn’t empty on cache
+  // ---------- Keyboard controls ----------
+  addEventListener('keydown', (e)=>{
+    if (e.key === '[') { SIM_SPEED_DAYS_PER_SEC = Math.max(0.01, SIM_SPEED_DAYS_PER_SEC / 1.5); smallEl.textContent = `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s (slower)`; }
+    else if (e.key === ']') { SIM_SPEED_DAYS_PER_SEC = Math.min(1e3, SIM_SPEED_DAYS_PER_SEC * 1.5); smallEl.textContent = `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s (faster)`; }
+    else if (e.code === 'Space') { paused = !paused; smallEl.textContent = paused ? 'Paused' : `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s`; }
+  });
+
+  // kick a tiny progress so bar isn’t empty if cached
   setProgress(5);
 </script>
 </body>
