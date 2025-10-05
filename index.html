@@ -533,6 +533,30 @@ const starPH = new THREE.Mesh(new THREE.SphereGeometry(received.star_radius_scen
 starPH.renderOrder = 1;
 starPH.material.depthWrite = true;
 scene.add(starPH);
+  // ===== Add a subtle dust cloud / mist effect around the star =====
+const dustGeo = new THREE.BufferGeometry();
+const dustCount = 800;
+const dustPositions = new Float32Array(dustCount * 3);
+for (let i = 0; i < dustCount; i++) {
+  const r = received.star_radius_scene * (1.5 + Math.random() * 2.5);
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(2 * Math.random() - 1);
+  dustPositions[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+  dustPositions[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+  dustPositions[i*3+2] = r * Math.cos(phi);
+}
+dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+
+const dustMat = new THREE.PointsMaterial({
+  color: 0xffbb66,
+  size: 0.05,
+  transparent: true,
+  opacity: 0.2,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending
+});
+const dustCloud = new THREE.Points(dustGeo, dustMat);
+scene.add(dustCloud);
 
 const planetPH = new THREE.Mesh(
   new THREE.SphereGeometry(received.planet_radius_scene, 36, 18),
@@ -632,6 +656,7 @@ function animateOrbit(tMs){
 
   placeholderStarMat.emissiveIntensity = 0.6 + Math.sin(tMs*0.0012)*0.04;
   starPH.rotation.y += 0.001; if (starReal) starReal.rotation.y += 0.001;
+  if (dustCloud) dustCloud.rotation.y += 0.0004;
   planetPH.rotation.y += 0.008; if (planetReal) planetReal.rotation.y += 0.01;
 
   const R = received.semi_major_axis_scene;
