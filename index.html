@@ -715,7 +715,9 @@ addEventListener('keydown', (e)=>{
 <script>
 const JobWatcher = (() => {
   const POLL_INTERVAL = 3000;
-  const BASE = 'https://us-central1-silent-suns.cloudfunctions.net/jobs';
+  // B) Bottom “JobWatcher” script (used by the status card)
+
+ const BASE = 'https://us-central1-silent-suns.cloudfunctions.net/get_job_status';
 
   function mount(hostSelector, { jobId }) {
     const host = document.querySelector(hostSelector);
