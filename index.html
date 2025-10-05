@@ -117,6 +117,7 @@
             <div class="dz-inner" aria-hidden="true">
               <div class="big">Click to select or drop a <span class="mono">.fits</span> file</div>
               <div class="small">Kepler/TESS light-curve FITS</div>
+              <div id="jobStatus"></div>
               <div class="progress-row hidden" id="progRow">
                 <div class="progress"><div class="in" id="progIn"></div></div>
                 <div class="status" id="progText">0%</div>
@@ -263,25 +264,28 @@ async function handleFile(file){
     if (!/\.(fits?|FITS?)$/.test(file.name)){ show(progRow,false); alert('Please select a .fits file'); return; }
 
     // 1) get signed URL (requires backend CORS to allow your origin)
-    const r = await fetch(GET_UPLOAD_URL, {
-      method:'POST',
-      mode:'cors',
-      headers:{ 'Content-Type':'application/json' },
-      body: JSON.stringify({ filename:file.name, contentType:file.type || 'application/fits' }),
-    });
-    if(!r.ok) throw new Error(`get_upload_url failed (${r.status})`);
-    const j = await r.json();
+const r = await fetch(GET_UPLOAD_URL, {
+  method:'POST',
+  mode:'cors',
+  headers:{ 'Content-Type':'application/json' },
+  body: JSON.stringify({ filename:file.name, contentType:file.type || 'application/fits' }),
+});
+if(!r.ok) throw new Error(`get_upload_url failed (${r.status})`);
+const j = await r.json();
 
-    const signedUrl  = j.signed_url || j.signedUrl || j.uploadUrl || j.url;
-    const jobId      = j.job_id     || j.jobId     || null;
-    const requireCT  = !!j.require_content_type;
-    if (!signedUrl) throw new Error('No signed URL in response');
+const signedUrl  = j.signed_url || j.signedUrl || j.uploadUrl || j.url;
+const jobId      = j.job_id     || j.jobId     || null;
+const requireCT  = !!j.require_content_type;
+if (!signedUrl) throw new Error('No signed URL in response');
 
-    // 2) PUT to signed URL (only set Content-Type if signature requires it)
-    await putWithProgress(signedUrl, file, requireCT ? (file.type||'application/fits') : null, setProg);
-    setProg(100);
-    show(afterText,true);
-    afterText.textContent = `Uploaded ${file.name} (${human(file.size)}). Processing…`;
+// 🧩 Add this line right here:
+if (jobId) JobWatcher.mount('#jobStatus', { jobId });
+
+// 2) PUT to signed URL (only set Content-Type if signature requires it)
+await putWithProgress(signedUrl, file, requireCT ? (file.type||'application/fits') : null, setProg);
+setProg(100);
+show(afterText,true);
+afterText.textContent = `Uploaded ${file.name} (${human(file.size)}). Processing…`;
 
     // 3) Optional job polling
     if (jobId && JOB_STATUS_BASE) pollJob(jobId, (status)=>{
@@ -705,5 +709,86 @@ addEventListener('keydown', (e)=>{
   });
 })();
 </script>
+
+  <!-- ===================== Job Status + Inference Viewer ===================== -->
+<script>
+const JobWatcher = (() => {
+  const POLL_INTERVAL = 3000;
+  const BASE = 'https://us-central1-silent-suns.cloudfunctions.net/jobs';
+
+  function mount(hostSelector, { jobId }) {
+    const host = document.querySelector(hostSelector);
+    if (!host) return console.warn('JobWatcher: host not found');
+    host.innerHTML = `
+      <div style="background:#0e1016;border:1px solid #1a1d24;border-radius:12px;padding:14px;color:#cfe2ff">
+        <h3 style="margin-top:0">Job Status</h3>
+        <div id="jwState">Starting…</div>
+        <div id="jwProgBar" style="height:6px;background:#182030;border-radius:999px;overflow:hidden;margin-top:6px">
+          <div id="jwProgFill" style="height:100%;width:0%;background:linear-gradient(90deg,#9cf,#9f9);transition:width .2s ease"></div>
+        </div>
+        <div id="jwInfo" style="margin-top:10px;font-size:13px;color:#9cf"></div>
+      </div>`;
+    const stateEl = host.querySelector('#jwState');
+    const fillEl = host.querySelector('#jwProgFill');
+    const infoEl = host.querySelector('#jwInfo');
+
+    let done = false;
+    async function poll() {
+      try {
+        const res = await fetch(`${BASE}/${encodeURIComponent(jobId)}`, { cache: 'no-store', mode: 'cors' });
+        if (!res.ok) return;
+        const j = await res.json();
+
+        if (j.state) stateEl.textContent = `State: ${j.state}`;
+        if (j.progress != null) fillEl.style.width = Math.min(100, j.progress) + '%';
+
+        if (j.state === 'done' && !done) {
+          done = true;
+          fillEl.style.width = '100%';
+          const a = [];
+          if (j.curve_csv)     a.push(`<a href="${j.curve_csv}" target="_blank">curve CSV</a>`);
+          if (j.features_json) a.push(`<a href="${j.features_json}" target="_blank">features JSON</a>`);
+          if (j.plot_png)      a.push(`<a href="${j.plot_png}" target="_blank">plot</a>`);
+          if (j.inference_json)a.push(`<a href="${j.inference_json}" target="_blank">inference JSON</a>`);
+
+          infoEl.innerHTML = '✅ Complete — ' + a.join(' · ');
+
+          if (j.inference_json) {
+            fetch(j.inference_json)
+              .then(r => r.json())
+              .then(d => {
+                const p = (d.pred_prob * 100).toFixed(1);
+                const jsonStr = JSON.stringify(d, null, 2);
+                infoEl.innerHTML += `
+                  <div style="margin-top:8px;font-size:13px;color:#9cf">
+                    <b>Prediction:</b> ${d.class.toUpperCase()} (${p}% confidence)<br>
+                    <b>Period:</b> ${d.period_days.toFixed(4)} days |
+                    <b>Depth:</b> ${d.depth_ppm.toFixed(0)} ppm<br>
+                    <b>Next Transit (BTJD):</b> ${d.next_transit_btjd.toFixed(3)}<br>
+                    <button id="dlBtn" style="margin-top:8px;background:#131721;border:1px solid #2a2e3a;color:#eaf6ff;padding:6px 10px;border-radius:8px;cursor:pointer;">Download JSON</button>
+                  </div>`;
+                host.querySelector('#dlBtn').addEventListener('click', () => {
+                  const blob = new Blob([jsonStr], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url; a.download = `inference_${jobId}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                });
+              })
+              .catch(err => console.warn('Failed to fetch inference JSON:', err));
+          }
+        }
+      } catch (err) {
+        console.warn('JobWatcher poll error:', err);
+      }
+      if (!done) setTimeout(poll, POLL_INTERVAL);
+    }
+    poll();
+  }
+  return { mount };
+})();
+</script>
+<!-- ===================== End of JobWatcher ===================== -->
 </body>
 </html>
