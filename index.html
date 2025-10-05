@@ -641,12 +641,12 @@ function pollJob(jobId, onUpdate) {
       }
 
       // Consider finished if state is terminal OR any outputs exist
-      const hasOutputs = !!(s.inference_json || s.plot_png || s.curve_csv || s.features_json);
-      if (!done && (s.state === "done" || s.state === "error" || hasOutputs)) {
-        done = true;
-        clearInterval(timerId);
-        console.log("[pollJob] Stopped (state/output reached).");
-      }
+      const hasOutputs = j.inference_json || j.plot_png || j.curve_csv || j.features_json;
+if ((j.state === 'done' || j.state === 'error' || hasOutputs) && !done) {
+  done = true;
+  fillEl.style.width = '100%';
+  // ... keep going to render links + fetch inference_json
+}
     } catch (e) {
       // Swallow transient network errors; keep polling
       console.warn("[pollJob] fetch failed:", e);
@@ -1110,100 +1110,88 @@ window.JobWatcher = (() => {
           infoEl.innerHTML = '✅ Complete — ' + a.join(' · ');
 
           if (j.inference_json) {
-            fetch(j.inference_json)
-
-            
-              .then(r => r.json())
-              .then(d => {.then(async d => {
-
-// --- Lock orbit params exactly once from inference JSON ---
-if (d.period_days && (d.t0_btjd ?? d.epoch_btjd)) {
-  const locked = window.lockOrbitOnce(Number(d.period_days), Number(d.t0_btjd ?? d.epoch_btjd));
-  if (locked) {
-    // Optional: reset arc so the progress ring starts fresh
-    simDays = 0;
-    arcStartTheta = null;
-  } else {
-    console.log("[Orbit] already locked; ignoring further updates");
-  }
-}
-                await pushInferenceToAI(d);
-
-
-
-
-                
-                
-  console.log("[JobWatcher] response", j);
-                
-
-  // --- keep your UI bits ---
-  const p = (d.pred_prob * 100).toFixed(1);
-  const jsonStr = JSON.stringify(d, null, 2);
-  infoEl.innerHTML += `
-    <div style="margin-top:8px;font-size:13px;color:#9cf">
-      <b>Prediction:</b> ${d.class.toUpperCase()} (${p}% confidence)<br>
-      <b>Period:</b> ${d.period_days.toFixed(4)} days |
-      <b>Depth:</b> ${d.depth_ppm.toFixed(0)} ppm<br>
-      <b>Next Transit (BTJD):</b> ${(d.next_transit_btjd ?? d.t0_btjd)?.toFixed(3)}<br>
-      <button id="dlBtn" style="margin-top:8px;background:#131721;border:1px solid #2a2e3a;color:#eaf6ff;padding:6px 10px;border-radius:8px;cursor:pointer;">Download JSON</button>
-    </div>`;
-  host.querySelector('#dlBtn').addEventListener('click', () => {
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `inference_${jobId}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  });
-
-  // ========== BEGIN visibility integration ==========
-  // 1) Next-transit JD
-  let btjdNext = Number(d.next_transit_btjd);
-  if (!isFinite(btjdNext)) {
-    const t0 = Number(d.t0_btjd ?? d.epoch_btjd ?? 0);
-    const P  = Number(d.period_days);
-    const nowJD = window.jdFromUTC(new Date());
-    const nowBTJD = nowJD - 2457000.0;
-    const n = Math.max(0, Math.ceil((nowBTJD - t0)/P));
-    btjdNext = t0 + n*P;
-  }
-  const jdMid = window.jdFromBTJD(btjdNext);
-  const durH = Number(d.duration_hours ?? (Number(d.duration_days)||0)*24 || 2);
-
-  // 2) RA/Dec via MAST (TIC preferred, then KIC)
-  const idType = (d.host_id_type || '').toUpperCase();
-  const hostId = d.host_id ?? d.target_id;
-  let raDeg = null, decDeg = null;
-
-  try {
-    if (idType === 'TIC' && hostId != null) {
-      const rows = await window.fetchTICbyId(hostId);
-      if (Array.isArray(rows) && rows.length) {
-        raDeg  = Number(rows[0].ra);
-        decDeg = Number(rows[0].dec);
+  fetch(j.inference_json)
+    .then(r => r.json())
+    .then(async (d) => {
+      // --- Lock orbit params exactly once from inference JSON ---
+      if (d.period_days && (d.t0_btjd ?? d.epoch_btjd)) {
+        const locked = window.lockOrbitOnce(
+          Number(d.period_days),
+          Number(d.t0_btjd ?? d.epoch_btjd)
+        );
+        if (locked) {
+          // reset arc so the progress ring starts fresh
+          simDays = 0;
+          arcStartTheta = null;
+        } else {
+          console.log("[Orbit] already locked; ignoring further updates");
+        }
       }
-    } else if (idType === 'KIC' && hostId != null) {
-      const rows = await window.fetchKICbyId(hostId);
-      if (Array.isArray(rows) && rows.length) {
-        raDeg  = Number(rows[0].ra);
-        decDeg = Number(rows[0].dec);
-      }
-    }
-  } catch (e) { console.warn('RA/Dec fetch failed:', e); }
 
-  // 3) Visibility -> globe pins
-  if (isFinite(raDeg) && isFinite(decDeg)) {
-    const bundles = window.computeVisibilityPins(raDeg, decDeg, jdMid, durH);
-    if (window.placeRegionPins) window.placeRegionPins(bundles);
-  } else {
-    console.warn('No RA/Dec available; skipping visibility pins.');
-  }
-  // ========== END visibility integration ==========
-})
-              })
-              .catch(err => console.warn('Failed to fetch inference JSON:', err));
+      await pushInferenceToAI(d);
+
+      // --- keep your UI bits ---
+      const p = (d.pred_prob * 100).toFixed(1);
+      const jsonStr = JSON.stringify(d, null, 2);
+      infoEl.innerHTML += `
+        <div style="margin-top:8px;font-size:13px;color:#9cf">
+          <b>Prediction:</b> ${d.class.toUpperCase()} (${p}% confidence)<br>
+          <b>Period:</b> ${d.period_days.toFixed(4)} days |
+          <b>Depth:</b> ${d.depth_ppm.toFixed(0)} ppm<br>
+          <b>Next Transit (BTJD):</b> ${(d.next_transit_btjd ?? d.t0_btjd)?.toFixed(3)}<br>
+          <button id="dlBtn" style="margin-top:8px;background:#131721;border:1px solid #2a2e3a;color:#eaf6ff;padding:6px 10px;border-radius:8px;cursor:pointer;">Download JSON</button>
+        </div>`;
+
+      host.querySelector('#dlBtn').addEventListener('click', () => {
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `inference_${jobId}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+
+      // ========== Visibility integration ==========
+      let btjdNext = Number(d.next_transit_btjd);
+      if (!isFinite(btjdNext)) {
+        const t0 = Number(d.t0_btjd ?? d.epoch_btjd ?? 0);
+        const P  = Number(d.period_days);
+        const nowJD = window.jdFromUTC(new Date());
+        const nowBTJD = nowJD - 2457000.0;
+        const n = Math.max(0, Math.ceil((nowBTJD - t0)/P));
+        btjdNext = t0 + n*P;
+      }
+      const jdMid = window.jdFromBTJD(btjdNext);
+      const durH = Number(d.duration_hours ?? (Number(d.duration_days)||0)*24 || 2);
+
+      const idType = (d.host_id_type || '').toUpperCase();
+      const hostId = d.host_id ?? d.target_id;
+      let raDeg = null, decDeg = null;
+      try {
+        if (idType === 'TIC' && hostId != null) {
+          const rows = await window.fetchTICbyId(hostId);
+          if (Array.isArray(rows) && rows.length) {
+            raDeg  = Number(rows[0].ra);
+            decDeg = Number(rows[0].dec);
           }
+        } else if (idType === 'KIC' && hostId != null) {
+          const rows = await window.fetchKICbyId(hostId);
+          if (Array.isArray(rows) && rows.length) {
+            raDeg  = Number(rows[0].ra);
+            decDeg = Number(rows[0].dec);
+          }
+        }
+      } catch (e) { console.warn('RA/Dec fetch failed:', e); }
+
+      if (isFinite(raDeg) && isFinite(decDeg)) {
+        const bundles = window.computeVisibilityPins(raDeg, decDeg, jdMid, durH);
+        if (window.placeRegionPins) window.placeRegionPins(bundles);
+      } else {
+        console.warn('No RA/Dec available; skipping visibility pins.');
+      }
+    })
+    .catch(err => console.warn('Failed to fetch inference JSON:', err));
+}
         }
       } catch (err) {
         console.warn('JobWatcher poll error:', err);
