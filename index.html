@@ -334,32 +334,34 @@
     return s;
   }
 
-  async function fetchAiPhrase(){
-    try {
-      // Vary the prompt slightly for randomness
-      const seeds = ["murmur", "echo", "whisper", "glint", "drift", "hush"];
-      const seed = seeds[Math.floor(Math.random() * seeds.length)];
+  async function fetchAiPhrase() {
+  try {
+    // Add a tiny bit of randomness to make each call unique
+    const seeds = ["murmur", "echo", "whisper", "glint", "drift", "hush"];
+    const seed = seeds[Math.floor(Math.random() * seeds.length)];
 
-      const prompt =
-        `Return ONE unique micro-phrase under 20 words about exoplanets or distant stars. ` +
-        `Plain text only, no quotes, no punctuation, no emojis, no extra words. Seed: ${seed}`;
+    // looser, creative prompt
+    const prompt = `
+      Write one short poetic phrase about exoplanets or distant stars.
+      Keep it natural — 5 to 15 words, imaginative, and human-sounding.
+      You may use light punctuation, metaphors, or emotion.
+      Seed word: ${seed}
+    `.trim();
 
-      const res = await fetch(ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt })
-      });
+    const res = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt })
+    });
 
-      const data = await res.json();
-      const raw = (data && data.reply) || "";
-      const clean = sanitizeToUnder20(raw);
-      fadeUpdate(clean);
-    } catch (e) {
-      // Soft fail: keep showing last message or a fallback
-      fadeUpdate("deep star hush");
-      console.error("AI fetch failed:", e);
-    }
+    const data = await res.json();
+    const raw = (data && data.reply) || "";
+    fadeUpdate(raw.trim());
+  } catch (e) {
+    fadeUpdate("silent stars watch");
+    console.error("AI fetch failed:", e);
   }
+}
 
   // Start immediately, then every 4s
   fetchAiPhrase();
