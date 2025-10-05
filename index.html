@@ -279,11 +279,92 @@
     <div class="card ai-card">
   <div class="ai-header">AI Insights</div>
   <div class="ai-content"></div>
-
+<div id="space-message" style="
+  color:#fff;
+  font-family: monospace;
+  font-size: 1.5rem;
+  text-align: center;
+  transition: opacity .4s;
+"></div>
       
 </div>
 
   </div>
+
+  <!-- Display container -->
+<div id="space-message" style="
+  color:#fff;
+  font-family: monospace;
+  font-size: 1.5rem;
+  text-align: center;
+  transition: opacity .4s;
+"></div>
+
+<script>
+  // 🔧 Put your deployed function URL here:
+  const ENDPOINT = "https://us-central1-planetchatbot-39a2c.cloudfunctions.net/getAnswer";
+
+  const msgEl = document.getElementById("space-message");
+
+  function fadeUpdate(text){
+    msgEl.style.opacity = 0;
+    setTimeout(() => {
+      msgEl.textContent = text;
+      msgEl.style.opacity = 1;
+    }, 300);
+  }
+
+  function sanitizeToUnder20(str){
+    if (!str) return "distant stars";
+    let s = String(str).trim();
+
+    // take only first line / sentence-ish
+    s = s.split(/\r?\n/)[0];
+
+    // strip quotes, punctuation, emojis, dashes, etc.
+    s = s.replace(/["'`.,;:!?/\\(){}\[\]_~*^@#$%|<>+=\-–—]/g, "")
+         .replace(/[^\x20-\x7E]/g, "") // non-ASCII guard
+         .trim();
+
+    // enforce < 20 letters
+    if (s.length > 20) s = s.slice(0, 20).trim();
+
+    // fallback if empty after sanitize
+    if (!s) s = "far exoworlds";
+    return s;
+  }
+
+  async function fetchAiPhrase(){
+    try {
+      // Vary the prompt slightly for randomness
+      const seeds = ["murmur", "echo", "whisper", "glint", "drift", "hush"];
+      const seed = seeds[Math.floor(Math.random() * seeds.length)];
+
+      const prompt =
+        `Return ONE unique micro-phrase under 20 letters about exoplanets or distant stars. ` +
+        `Plain text only, no quotes, no punctuation, no emojis, no extra words. Seed: ${seed}`;
+
+      const res = await fetch(ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt })
+      });
+
+      const data = await res.json();
+      const raw = (data && data.reply) || "";
+      const clean = sanitizeToUnder20(raw);
+      fadeUpdate(clean);
+    } catch (e) {
+      // Soft fail: keep showing last message or a fallback
+      fadeUpdate("deep star hush");
+      console.error("AI fetch failed:", e);
+    }
+  }
+
+  // Start immediately, then every 4s
+  fetchAiPhrase();
+  setInterval(fetchAiPhrase, 4000);
+</script>
 
 <script type="module">
 
