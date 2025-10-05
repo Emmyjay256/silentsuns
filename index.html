@@ -644,6 +644,30 @@ import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders
 import { CSS2DRenderer } from 'https://unpkg.com/three@0.160.0/examples/jsm/renderers/CSS2DRenderer.js';
 
 const received = { tic:261136679, spectral_type:"A", period_days:5.4321, t0_btjd:134.5342, semi_major_axis_scene:1.4, planet_radius_scene:0.25, star_radius_scene:0.7 };
+
+  // ---- ORBIT STORE (immutable after first update) ----
+const orbit = {
+  period_days: received.period_days,
+  t0_btjd: received.t0_btjd,
+  _locked: false
+};
+
+// One-time setter exposed to non-module scripts
+window.lockOrbitOnce = (periodDays, t0Btjd) => {
+  if (orbit._locked) return false;
+  if (Number.isFinite(periodDays)) orbit.period_days = Number(periodDays);
+  if (Number.isFinite(t0Btjd))     orbit.t0_btjd     = Number(t0Btjd);
+  orbit._locked = true;
+  console.log("[Orbit] locked:", orbit);
+  return true;
+};
+
+// Helper for reads
+const getOrbit = () => orbit;
+
+
+
+  
 const MIN_ORBIT_MULT = 8;
 if (received.semi_major_axis_scene < MIN_ORBIT_MULT * received.star_radius_scene) {
   received.semi_major_axis_scene = MIN_ORBIT_MULT * received.star_radius_scene;
@@ -817,7 +841,7 @@ const PI2 = Math.PI * 2;
 function orbitAngle(period_days, t0_btjd, current_btjd){
   const ph = ((current_btjd - t0_btjd) / period_days) % 1; return (ph < 0 ? ph + 1 : ph) * PI2;
 }
-const currentBTJD = ()=> received.t0_btjd + simDays;
+const currentBTJD = ()=> getOrbit().t0_btjd + simDays;
 
 function animateOrbit(tMs){
   requestAnimationFrame(animateOrbit);
@@ -829,7 +853,7 @@ function animateOrbit(tMs){
   planetPH.rotation.y += 0.008; if (planetReal) planetReal.rotation.y += 0.01;
 
   const R = received.semi_major_axis_scene;
-  const theta = orbitAngle(received.period_days, received.t0_btjd, currentBTJD());
+  const theta = orbitAngle(getOrbit().period_days, getOrbit().t0_btjd, currentBTJD());
   const x = Math.cos(theta) * R, z = Math.sin(theta) * R;
   planetPH.position.set(x, 0, z); if (planetReal) planetReal.position.set(x, 0, z);
 
@@ -1072,15 +1096,16 @@ window.JobWatcher = (() => {
               .then(r => r.json())
               .then(d => {.then(async d => {
 
-// --- Update the orbit parameters dynamically ---
-if (d.period_days && d.t0_btjd) {
-  console.log("[Orbit] Updating from inference JSON:", d.period_days, d.t0_btjd);
-  received.period_days = Number(d.period_days);
-  received.t0_btjd     = Number(d.t0_btjd);
-
-  // Optional: reset orbit progress
-  simDays = 0;
-  arcStartTheta = null;
+// --- Lock orbit params exactly once from inference JSON ---
+if (d.period_days && (d.t0_btjd ?? d.epoch_btjd)) {
+  const locked = window.lockOrbitOnce(Number(d.period_days), Number(d.t0_btjd ?? d.epoch_btjd));
+  if (locked) {
+    // Optional: reset arc so the progress ring starts fresh
+    simDays = 0;
+    arcStartTheta = null;
+  } else {
+    console.log("[Orbit] already locked; ignoring further updates");
+  }
 }
                 await pushInferenceToAI(d);
 
