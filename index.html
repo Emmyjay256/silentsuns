@@ -620,124 +620,20 @@ function putWithProgress(url, file, contentTypeOrNull, onProgress){
 }
 
 function pollJob(jobId, onUpdate){
-  const base = `${JOB_STATUS_BASE}/${encodeURIComponent(jobId)}`;
-  const POLL_MS = 2500;
-
-  let processed = false;            // guard so we only “finish” once
-  let sameLastUpdate = 0;
-  let lastSeenUpdate = null;
-
-  const infoEl = document.querySelector('#jwInfo');
-  const fillEl = document.querySelector('#jwProgFill');
-
+  const url = `${JOB_STATUS_BASE}/${encodeURIComponent(jobId)}`;
   const tick = async ()=>{
     try{
-      // cache-bust at every poll
-      const url = `${base}?nocache=${Date.now()}`;
-      const r = await fetch(url, {
-        mode: 'cors',
-        cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache' }
-      });
-      if (!r.ok) return;
-      const s = await r.json();
-
-      // progress watchdog (optional)
-      if (s.lastUpdate === lastSeenUpdate) sameLastUpdate++;
-      else { sameLastUpdate = 0; lastSeenUpdate = s.lastUpdate; }
-
-      // push to UI
-      onUpdate?.(s);
-
-      const hasOutputs =
-        !!(s.inference_json || s.curve_csv || s.plot_png || s.features_json);
-
-      const isTerminal = (s.state === 'done' || s.state === 'error' || hasOutputs);
-
-      // If we can see outputs, proceed even if state still says "running"
-      if (!processed && (hasOutputs || s.state === 'done')) {
-        processed = true;
-
-        // Fill bar and show links
-        if (fillEl) fillEl.style.width = '100%';
-        if (infoEl) {
-          const links = [];
-          if (s.curve_csv)      links.push(`<a href="${s.curve_csv}" target="_blank">curve CSV</a>`);
-          if (s.features_json)  links.push(`<a href="${s.features_json}" target="_blank">features JSON</a>`);
-          if (s.plot_png)       links.push(`<a href="${s.plot_png}" target="_blank">plot</a>`);
-          if (s.inference_json) links.push(`<a href="${s.inference_json}" target="_blank">inference JSON</a>`);
-          infoEl.innerHTML = '✅ Complete — ' + links.join(' · ');
-        }
-
-        // Kick your existing inference handler even if state !== "done"
-        if (s.inference_json) {
-          try {
-            const ir = await fetch(`${s.inference_json}?nocache=${Date.now()}`, { cache: 'no-store' });
-            const d  = await ir.json();
-
-            // Lock orbit once
-            if (d.period_days && (d.t0_btjd ?? d.epoch_btjd)) {
-              const locked = window.lockOrbitOnce(Number(d.period_days), Number(d.t0_btjd ?? d.epoch_btjd));
-              if (locked) { window.simDays = 0; window.arcStartTheta = null; }
-            }
-
-            // AI summary
-            await pushInferenceToAI(d);
-
-            // Visibility pins (your existing code path)
-            let btjdNext = Number(d.next_transit_btjd);
-            if (!isFinite(btjdNext)) {
-              const t0 = Number(d.t0_btjd ?? d.epoch_btjd ?? 0);
-              const P  = Number(d.period_days);
-              const nowJD = window.jdFromUTC(new Date());
-              const nowBTJD = nowJD - 2457000.0;
-              const n = Math.max(0, Math.ceil((nowBTJD - t0)/P));
-              btjdNext = t0 + n*P;
-            }
-            const jdMid = window.jdFromBTJD(btjdNext);
-            const durH  = Number(d.duration_hours ?? (Number(d.duration_days)||0)*24 || 2);
-
-            // Try TIC then KIC if provided
-            const idType = (d.host_id_type || '').toUpperCase();
-            const hostId = d.host_id ?? d.target_id;
-            let raDeg = null, decDeg = null;
-
-            try {
-              if (idType === 'TIC' && hostId != null) {
-                const rows = await window.fetchTICbyId(hostId);
-                if (Array.isArray(rows) && rows.length) { raDeg = +rows[0].ra; decDeg = +rows[0].dec; }
-              } else if (idType === 'KIC' && hostId != null) {
-                const rows = await window.fetchKICbyId(hostId);
-                if (Array.isArray(rows) && rows.length) { raDeg = +rows[0].ra; decDeg = +rows[0].dec; }
-              }
-            } catch (e) { console.warn('RA/Dec fetch failed:', e); }
-
-            if (isFinite(raDeg) && isFinite(decDeg) && window.placeRegionPins) {
-              const bundles = window.computeVisibilityPins(raDeg, decDeg, jdMid, durH);
-              window.placeRegionPins(bundles);
-            } else {
-              console.warn('No RA/Dec available; skipping visibility pins.');
-            }
-          } catch (err) {
-            console.warn('Failed to load inference JSON:', err);
-          }
-        }
+      console.log("[pollJob] Fetching:", url);  // 👈 ADD THIS
+      const r = await fetch(url, {cache:'no-store', mode:'cors'});
+      if (r.ok){
+        const s = await r.json();
+        console.log("[pollJob] Response:", s);  // 👈 ADD THIs
+        onUpdate?.(s);
+        if (s.state==='done'||s.state==='error') clearInterval(t);
       }
-
-      // Stop polling once we’re terminal (or very stuck)
-      if (isTerminal || sameLastUpdate >= 48) {
-        clearInterval(handle);
-        if (sameLastUpdate >= 48 && s.state === 'running' && infoEl) {
-          infoEl.innerHTML += `<div style="margin-top:6px;color:#9cf;font-size:12px">
-            ⚠️ Job status looks stale; proceeded using available outputs.</div>`;
-        }
-      }
-    }catch(e){
-      console.warn("[pollJob] Error", e);
-    }
+    }catch(e){ console.warn("[pollJob] Error", e); }
   };
-
-  const handle = setInterval(tick, POLL_MS);
+  const t = setInterval(tick, 2500);
   tick();
 }
 
