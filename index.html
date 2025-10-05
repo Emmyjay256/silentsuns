@@ -244,93 +244,99 @@
 
 <script type="module">
   /* ====================== Upload plumbing ====================== */
-  const GET_UPLOAD_URL = 'https://us-central1-silent-suns.cloudfunctions.net/get_upload_url';
-  const JOB_STATUS_BASE = 'https://us-central1-silent-suns.cloudfunctions.net/jobs'; // optional
+/* ====================== Upload plumbing (CORS-safe) ====================== */
+const GET_UPLOAD_URL = 'https://us-central1-silent-suns.cloudfunctions.net/get_upload_url';
+const JOB_STATUS_BASE = 'https://us-central1-silent-suns.cloudfunctions.net/jobs'; // optional
 
-  const dz = document.getElementById('dz');
-  const fileInput = document.getElementById('fileInput');
-  const progRow = document.getElementById('progRow');
-  const progIn = document.getElementById('progIn');
-  const progText = document.getElementById('progText');
-  const afterText = document.getElementById('afterText');
+const dz = document.getElementById('dz');
+const fileInput = document.getElementById('fileInput');
+const progRow = document.getElementById('progRow');
+const progIn = document.getElementById('progIn');
+const progText = document.getElementById('progText');
+const afterText = document.getElementById('afterText');
 
-  const setProg = (pct)=>{ const v=Math.max(0,Math.min(100,pct|0)); progIn.style.width=v+'%'; progText.textContent=v+'%'; };
-  const show = (el, yes)=> el.classList.toggle('hidden', !yes);
-  const human = (n)=>{ const u=['B','KB','MB','GB']; let i=0,x=n; while(x>=1024&&i<u.length-1){x/=1024;i++;} return (x<10?x.toFixed(1):x.toFixed(0))+' '+u[i]; };
+const setProg = (pct)=>{ const v=Math.max(0,Math.min(100,pct|0)); progIn.style.width=v+'%'; progText.textContent=v+'%'; };
+const show = (el, yes)=> el.classList.toggle('hidden', !yes);
+const human = (n)=>{ const u=['B','KB','MB','GB']; let i=0,x=n; while(x>=1024&&i<u.length-1){x/=1024;i++;} return (x<10?x.toFixed(1):x.toFixed(0))+' '+u[i]; };
 
-  dz.addEventListener('dragover', (e)=>{ e.preventDefault(); dz.classList.add('drag'); });
-  dz.addEventListener('dragleave', ()=> dz.classList.remove('drag'));
-  dz.addEventListener('drop', (e)=>{ e.preventDefault(); dz.classList.remove('drag'); const f=e.dataTransfer?.files?.[0]; if(f) handleFile(f); });
-  fileInput.addEventListener('change', ()=>{ const f=fileInput.files?.[0]; if(f) handleFile(f); fileInput.value=''; });
+dz.addEventListener('dragover', (e)=>{ e.preventDefault(); dz.classList.add('drag'); });
+dz.addEventListener('dragleave', ()=> dz.classList.remove('drag'));
+dz.addEventListener('drop', (e)=>{ e.preventDefault(); dz.classList.remove('drag'); const f=e.dataTransfer?.files?.[0]; if(f) handleFile(f); });
+fileInput.addEventListener('change', ()=>{ const f=fileInput.files?.[0]; if(f) handleFile(f); fileInput.value=''; });
 
-  async function handleFile(file){
-    try{
-      show(progRow,true); setProg(0); show(afterText,false); afterText.textContent='';
-      if (!/\.(fits?|FITS?)$/.test(file.name)){ show(progRow,false); alert('Please select a .fits file'); return; }
+async function handleFile(file){
+  try{
+    show(progRow,true); setProg(0); show(afterText,false); afterText.textContent='';
+    if (!/\.(fits?|FITS?)$/.test(file.name)){ show(progRow,false); alert('Please select a .fits file'); return; }
 
-      // 1) get signed URL
-      const r = await fetch(GET_UPLOAD_URL, {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ filename:file.name, contentType:file.type||'application/fits' })
-      });
-      if(!r.ok) throw new Error(`get_upload_url failed (${r.status})`);
-      const j = await r.json();
-      const signedUrl = j.signed_url || j.signedUrl || j.uploadUrl || j.url;
-      const jobId     = j.job_id     || j.jobId     || null;
-      if (!signedUrl) throw new Error('No signed URL in response');
-
-      // 2) PUT with progress
-      await putWithProgress(signedUrl, file, file.type||'application/fits', setProg);
-      setProg(100);
-      show(afterText,true);
-      afterText.textContent = `Uploaded ${file.name} (${human(file.size)}). Processing…`;
-
-      // 3) Optional polling
-      if (jobId && JOB_STATUS_BASE) pollJob(jobId, (status)=>{
-        if (status.state === 'done'){
-          const a = [];
-          if (status.curve_csv)     a.push(`<a href="${status.curve_csv}" target="_blank">curve CSV</a>`);
-          if (status.features_json) a.push(`<a href="${status.features_json}" target="_blank">features JSON</a>`);
-          if (status.plot_png)      a.push(`<a href="${status.plot_png}" target="_blank">plot</a>`);
-          afterText.innerHTML = '✅ Done — ' + a.join(' · ');
-          show(progRow,false);
-        } else if (status.state === 'error'){
-          afterText.textContent = '❌ Processing error: ' + (status.error||'unknown');
-          show(progRow,false);
-        }
-      });
-
-    }catch(err){
-      console.error(err);
-      show(progRow,false);
-      show(afterText,true);
-      afterText.textContent = '❌ ' + (err?.message || err);
-    }
-  }
-
-  function putWithProgress(url, file, contentType, onProgress){
-    return new Promise((resolve,reject)=>{
-      const xhr = new XMLHttpRequest();
-      xhr.open('PUT', url, true);
-      if (contentType) xhr.setRequestHeader('Content-Type', contentType);
-      xhr.upload.onprogress = (e)=>{ if (e.lengthComputable){ onProgress(Math.round(100*e.loaded/e.total)); } };
-      xhr.onload  = ()=> (xhr.status>=200 && xhr.status<300) ? resolve() : reject(new Error('HTTP '+xhr.status));
-      xhr.onerror = ()=> reject(new Error('Network error'));
-      xhr.send(file);
+    // 1) get signed URL (front-end cannot fix CORS; the backend must allow your origin)
+    const r = await fetch(GET_UPLOAD_URL, {
+      method:'POST',
+      mode:'cors',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ filename:file.name, contentType:file.type || 'application/fits' }),
     });
-  }
+    if(!r.ok) throw new Error(`get_upload_url failed (${r.status})`);
+    const j = await r.json();
 
-  function pollJob(jobId, onUpdate){
-    const url = `${JOB_STATUS_BASE}/${encodeURIComponent(jobId)}`;
-    const tick = async ()=>{
-      try{
-        const r = await fetch(url, {cache:'no-store'});
-        if (r.ok){ const s = await r.json(); onUpdate?.(s); if (s.state==='done'||s.state==='error') clearInterval(t); }
-      }catch(e){ /* keep trying */ }
-    };
-    const t = setInterval(tick, 2500); tick();
+    const signedUrl  = j.signed_url || j.signedUrl || j.uploadUrl || j.url;
+    const jobId      = j.job_id     || j.jobId     || null;
+    const requireCT  = !!j.require_content_type; // backend can set this to true if the URL was signed with Content-Type
+
+    if (!signedUrl) throw new Error('No signed URL in response');
+
+    // 2) PUT file to signed URL (avoid setting Content-Type unless required by signature)
+    await putWithProgress(signedUrl, file, requireCT ? (file.type||'application/fits') : null, setProg);
+    setProg(100);
+    show(afterText,true);
+    afterText.textContent = `Uploaded ${file.name} (${human(file.size)}). Processing…`;
+
+    // 3) Optional polling
+    if (jobId && JOB_STATUS_BASE) pollJob(jobId, (status)=>{
+      if (status.state === 'done'){
+        const a = [];
+        if (status.curve_csv)     a.push(`<a href="${status.curve_csv}" target="_blank">curve CSV</a>`);
+        if (status.features_json) a.push(`<a href="${status.features_json}" target="_blank">features JSON</a>`);
+        if (status.plot_png)      a.push(`<a href="${status.plot_png}" target="_blank">plot</a>`);
+        afterText.innerHTML = '✅ Done — ' + a.join(' · ');
+        show(progRow,false);
+      } else if (status.state === 'error'){
+        afterText.textContent = '❌ Processing error: ' + (status.error||'unknown');
+        show(progRow,false);
+      }
+    });
+
+  }catch(err){
+    console.error(err);
+    show(progRow,false);
+    show(afterText,true);
+    afterText.textContent = '❌ ' + (err?.message || err);
   }
+}
+
+function putWithProgress(url, file, contentTypeOrNull, onProgress){
+  return new Promise((resolve,reject)=>{
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url, true);
+    // Only set Content-Type if the signed URL expects it.
+    if (contentTypeOrNull) xhr.setRequestHeader('Content-Type', contentTypeOrNull);
+    xhr.upload.onprogress = (e)=>{ if (e.lengthComputable){ onProgress(Math.round(100*e.loaded/e.total)); } };
+    xhr.onload  = ()=> (xhr.status>=200 && xhr.status<300) ? resolve() : reject(new Error('HTTP '+xhr.status));
+    xhr.onerror = ()=> reject(new Error('Network error'));
+    xhr.send(file);
+  });
+}
+
+function pollJob(jobId, onUpdate){
+  const url = `${JOB_STATUS_BASE}/${encodeURIComponent(jobId)}`;
+  const tick = async ()=>{
+    try{
+      const r = await fetch(url, {cache:'no-store', mode:'cors'});
+      if (r.ok){ const s = await r.json(); onUpdate?.(s); if (s.state==='done'||s.state==='error') clearInterval(t); }
+    }catch(e){ /* keep trying */ }
+  };
+  const t = setInterval(tick, 2500); tick();
+}
 
   /* ====================== ORBIT SIM ====================== */
   import * as THREE from 'three';
