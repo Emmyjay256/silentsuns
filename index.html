@@ -619,21 +619,40 @@ function putWithProgress(url, file, contentTypeOrNull, onProgress){
   });
 }
 
-function pollJob(jobId, onUpdate){
+function pollJob(jobId, onUpdate) {
   const url = `${JOB_STATUS_BASE}/${encodeURIComponent(jobId)}`;
-  const tick = async ()=>{
-    try{
-      console.log("[pollJob] Fetching:", url);  // 👈 ADD THIS
-      const r = await fetch(url, {cache:'no-store', mode:'cors'});
-      if (r.ok){
-        const s = await r.json();
-        console.log("[pollJob] Response:", s);  // 👈 ADD THIs
-        onUpdate?.(s);
-        if (s.state==='done'||s.state==='error') clearInterval(t);
+  let timerId = null;
+  let done = false;
+
+  async function tick() {
+    try {
+      // cache-bust every request so we never read a stale status.json
+      const r = await fetch(`${url}?_=${Date.now()}`, {
+        cache: "no-store",
+        mode: "cors",
+        headers: { "Cache-Control": "no-cache" }
+      });
+      if (!r.ok) return;
+
+      const s = await r.json();
+      console.log("[pollJob] Response:", s);
+      onUpdate?.(s);
+
+      // treat any visible output URLs as completion
+      const hasOutputs =
+        s.inference_json || s.plot_png || s.curve_csv || s.features_json;
+
+      if (!done && (s.state === "done" || s.state === "error" || hasOutputs)) {
+        done = true;
+        clearInterval(timerId);
+        console.log("[pollJob] Job considered complete (state or outputs found)");
       }
-    }catch(e){ console.warn("[pollJob] Error", e); }
-  };
-  const t = setInterval(tick, 2500);
+    } catch (e) {
+      console.warn("[pollJob] Error", e);
+    }
+  }
+
+  timerId = setInterval(tick, 2500);
   tick();
 }
 
