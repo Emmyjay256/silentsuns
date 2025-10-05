@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Silent Planets — TESS Orbit Viz</title>
+  <title>Silent Suns — Kepler Orbit Viz</title>
   <style>
     :root{ --bg:#0b0b0b; --ink:#fff; --muted:#cfd3dc; --card:#111318; --glass:rgba(0,0,0,.55); --accent:#00e5ff; }
     html,body{height:100%}
@@ -78,7 +78,7 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Silent Planets</h1>
+    <h1>Silent Suns</h1>
     <p class="lead">AI-powered exoplanet detection from raw FITS. Upload a light curve, get a physics-aware analysis, a 3D orbit, and an Earth visibility map.</p>
     <div>
       <span class="badge"><span class="dot"></span> NASA Space Apps — Prototype</span>
@@ -98,7 +98,7 @@
       <div class="two-col" style="padding:14px;">
         <div class="note" style="background:transparent;border:none;padding:0">
           <h3>What we built</h3>
-          <p>Silent Planets is an end-to-end pipeline and web UI: we ingest <span class="mono">.fits files,</span>, clean and detrend, run BLS to find periodic dips, phase-fold the curve, extract features, and pass them to a lightweight classifier. Results are rendered as an interactive orbit plus an Earth map for “where to look next to see a transit”.</p>
+          <p>Silent Suns is an end-to-end pipeline and web UI: we ingest <span class="mono">.fits files,</span>, clean and detrend, run BLS to find periodic dips, phase-fold the curve, extract features, and pass them to a lightweight classifier. Results are rendered as an interactive orbit plus an Earth map for “where to look next to see a transit”.</p>
           <div class="hr"></div>
           <div class="kpi">
             <div class="box"><div class="n" id="kpiSamples">—</div><div class="l">Processed samples</div></div>
@@ -898,9 +898,29 @@ window.JobWatcher = (() => {
 
           if (j.inference_json) {
             fetch(j.inference_json)
+
+            
               .then(r => r.json())
               .then(d => {.then(async d => {
+
+// --- Update the orbit parameters dynamically ---
+if (d.period_days && d.t0_btjd) {
+  console.log("[Orbit] Updating from inference JSON:", d.period_days, d.t0_btjd);
+  received.period_days = Number(d.period_days);
+  received.t0_btjd     = Number(d.t0_btjd);
+
+  // Optional: reset orbit progress
+  simDays = 0;
+  arcStartTheta = null;
+}
+
+
+
+
+                
+                
   console.log("[JobWatcher] response", j);
+                
 
   // --- keep your UI bits ---
   const p = (d.pred_prob * 100).toFixed(1);
