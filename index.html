@@ -302,7 +302,7 @@
 
 <script>
   // 🔧 Put your deployed function URL here:
-  const ENDPOINT = "https://us-central1-planetchatbot-39a2c.cloudfunctions.net/getAnswer";
+  const ENDPOINT = "https://console.firebase.google.com/project/planetchatbot-39a2c/overview";
 
   const msgEl = document.getElementById("space-message");
 
@@ -327,7 +327,7 @@
          .trim();
 
     // enforce < 20 letters
-    if (s.length > 20) s = s.slice(0, 20).trim();
+  //  if (s.length > 20) s = s.slice(0, 20).trim();
 
     // fallback if empty after sanitize
     if (!s) s = "far exoworlds";
@@ -341,7 +341,7 @@
       const seed = seeds[Math.floor(Math.random() * seeds.length)];
 
       const prompt =
-        `Return ONE unique micro-phrase under 20 letters about exoplanets or distant stars. ` +
+        `Return ONE unique micro-phrase under 20 words about exoplanets or distant stars. ` +
         `Plain text only, no quotes, no punctuation, no emojis, no extra words. Seed: ${seed}`;
 
       const res = await fetch(ENDPOINT, {
