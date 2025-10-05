@@ -381,7 +381,14 @@ const requireCT  = !!j.require_content_type;
 if (!signedUrl) throw new Error('No signed URL in response');
 
 // 🧩 Add this line right here:
-if (jobId) JobWatcher.mount('#jobStatus', { jobId });
+// 🧩 Add this line right here (wrapped for safety)
+if (jobId) {
+  if (window.JobWatcher && typeof window.JobWatcher.mount === 'function') {
+    window.JobWatcher.mount('#jobStatus', { jobId });
+  } else {
+    console.warn('JobWatcher not available yet — skipping mount');
+  }
+}
 
 // 2) PUT to signed URL (only set Content-Type if signature requires it)
 await putWithProgress(signedUrl, file, requireCT ? (file.type||'application/fits') : null, setProg);
@@ -821,7 +828,7 @@ addEventListener('keydown', (e)=>{
 
   <!-- ===================== Job Status + Inference Viewer ===================== -->
 <script>
-const JobWatcher = (() => {
+window.JobWatcher = (() => {
   const POLL_INTERVAL = 3000;
   // B) Bottom “JobWatcher” script (used by the status card)
 
