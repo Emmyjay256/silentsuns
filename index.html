@@ -59,22 +59,17 @@
     .pill{display:inline-block;background:#122033;border:1px solid #20324b;border-radius:999px;padding:6px 10px;font-size:12px;margin:0 8px 8px 0}
     .hr{height:1px;background:#1a1d24;margin:16px 0}
 
-    /* upload tile */
-    .dropzone{
-      position:relative; display:flex; align-items:center; justify-content:center;
-      min-height:180px; border:1px dashed #2a2e3a; border-radius:14px; background:#0b0f18; cursor:pointer;
-      transition: border-color .15s ease, background .15s ease;
-    }
-    .dropzone:hover{ border-color:#3a4152; background:#0c1220; }
-    .dropzone.drag{ border-color:#00e5ff; background:#0b1522; box-shadow:0 0 0 2px rgba(0,229,255,.15) inset; }
-    .dz-inner{ text-align:center; color:#cfe2ff; }
-    .dz-inner .big{ font-weight:800; font-size:15px; }
-    .dz-inner .small{ font-size:12px; color:#9fb0c8; margin-top:6px; }
-    .progress-row{ display:flex; align-items:center; gap:10px; margin-top:10px; }
-    .progress{ height:6px; background:#182030; border-radius:999px; overflow:hidden; width:100%; }
-    .progress .in{ height:100%; width:0%; background:linear-gradient(90deg,#9cf,#9f9); transition:width .15s ease; }
-    .status{ font-size:12px; color:#9fb0c8; }
-    .hidden{ display:none; }
+    .dropzone{position:relative;display:flex;align-items:center;justify-content:center;min-height:180px;border:1px dashed #2a2e3a;border-radius:14px;background:#0b0f18;cursor:pointer;transition:border-color .15s ease,background .15s ease}
+    .dropzone:hover{border-color:#3a4152;background:#0c1220}
+    .dropzone.drag{border-color:#00e5ff;background:#0b1522;box-shadow:0 0 0 2px rgba(0,229,255,.15) inset}
+    .dz-inner{text-align:center;color:#cfe2ff}
+    .dz-inner .big{font-weight:800;font-size:15px}
+    .dz-inner .small{font-size:12px;color:#9fb0c8;margin-top:6px}
+    .progress-row{display:flex;align-items:center;gap:10px;margin-top:10px}
+    .progress{height:6px;background:#182030;border-radius:999px;overflow:hidden;width:100%}
+    .progress .in{height:100%;width:0%;background:linear-gradient(90deg,#9cf,#9f9);transition:width .15s ease}
+    .status{font-size:12px;color:#9fb0c8}
+    .hidden{display:none}
   </style>
 
   <script type="importmap">
@@ -118,8 +113,7 @@
         <div class="note" id="upload">
           <h3>Upload a FITS</h3>
           <div id="dz" class="dropzone">
-            <input id="fileInput" type="file" accept=".fits,.fit"
-                   style="position:absolute; inset:0; opacity:0; cursor:pointer;" />
+            <input id="fileInput" type="file" accept=".fits,.fit" style="position:absolute; inset:0; opacity:0; cursor:pointer;" />
             <div class="dz-inner" aria-hidden="true">
               <div class="big">Click to select or drop a <span class="mono">.fits</span> file</div>
               <div class="small">Kepler/TESS light-curve FITS • uploads directly to GCS via signed URL</div>
@@ -130,9 +124,7 @@
               <div class="small hidden" id="afterText"></div>
             </div>
           </div>
-          <div class="small-muted" style="margin-top:8px">
-            After upload, processing runs in the cloud (detrend → BLS → phase-fold). We’ll show job status if available.
-          </div>
+          <div class="small-muted" style="margin-top:8px">After upload, processing runs in the cloud (detrend → BLS → phase-fold). We’ll show job status if available.</div>
         </div>
       </div>
     </div>
@@ -243,8 +235,7 @@
   </div>
 
 <script type="module">
-  /* ====================== Upload plumbing ====================== */
-/* ====================== Upload plumbing (CORS-safe) ====================== */
+/* ====================== Upload plumbing (client CORS-safe) ====================== */
 const GET_UPLOAD_URL = 'https://us-central1-silent-suns.cloudfunctions.net/get_upload_url';
 const JOB_STATUS_BASE = 'https://us-central1-silent-suns.cloudfunctions.net/jobs'; // optional
 
@@ -269,7 +260,7 @@ async function handleFile(file){
     show(progRow,true); setProg(0); show(afterText,false); afterText.textContent='';
     if (!/\.(fits?|FITS?)$/.test(file.name)){ show(progRow,false); alert('Please select a .fits file'); return; }
 
-    // 1) get signed URL (front-end cannot fix CORS; the backend must allow your origin)
+    // 1) get signed URL (requires backend CORS to allow your origin)
     const r = await fetch(GET_UPLOAD_URL, {
       method:'POST',
       mode:'cors',
@@ -281,17 +272,16 @@ async function handleFile(file){
 
     const signedUrl  = j.signed_url || j.signedUrl || j.uploadUrl || j.url;
     const jobId      = j.job_id     || j.jobId     || null;
-    const requireCT  = !!j.require_content_type; // backend can set this to true if the URL was signed with Content-Type
-
+    const requireCT  = !!j.require_content_type;
     if (!signedUrl) throw new Error('No signed URL in response');
 
-    // 2) PUT file to signed URL (avoid setting Content-Type unless required by signature)
+    // 2) PUT to signed URL (only set Content-Type if signature requires it)
     await putWithProgress(signedUrl, file, requireCT ? (file.type||'application/fits') : null, setProg);
     setProg(100);
     show(afterText,true);
     afterText.textContent = `Uploaded ${file.name} (${human(file.size)}). Processing…`;
 
-    // 3) Optional polling
+    // 3) Optional job polling
     if (jobId && JOB_STATUS_BASE) pollJob(jobId, (status)=>{
       if (status.state === 'done'){
         const a = [];
@@ -318,7 +308,6 @@ function putWithProgress(url, file, contentTypeOrNull, onProgress){
   return new Promise((resolve,reject)=>{
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', url, true);
-    // Only set Content-Type if the signed URL expects it.
     if (contentTypeOrNull) xhr.setRequestHeader('Content-Type', contentTypeOrNull);
     xhr.upload.onprogress = (e)=>{ if (e.lengthComputable){ onProgress(Math.round(100*e.loaded/e.total)); } };
     xhr.onload  = ()=> (xhr.status>=200 && xhr.status<300) ? resolve() : reject(new Error('HTTP '+xhr.status));
@@ -338,335 +327,362 @@ function pollJob(jobId, onUpdate){
   const t = setInterval(tick, 2500); tick();
 }
 
-  /* ====================== ORBIT SIM ====================== */
-  import * as THREE from 'three';
-  import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
-  import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
-  import { CSS2DRenderer } from 'https://unpkg.com/three@0.160.0/examples/jsm/renderers/CSS2DRenderer.js';
+/* ====================== ORBIT SIM (striping-free crossfade) ====================== */
+import * as THREE from 'three';
+import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+import { CSS2DRenderer } from 'https://unpkg.com/three@0.160.0/examples/jsm/renderers/CSS2DRenderer.js';
 
-  const received = { tic:261136679, spectral_type:"A", period_days:5.4321, t0_btjd:134.5342, semi_major_axis_scene:1.4, planet_radius_scene:0.25, star_radius_scene:0.7 };
-  const MIN_ORBIT_MULT = 8;
-  if (received.semi_major_axis_scene < MIN_ORBIT_MULT * received.star_radius_scene) {
-    received.semi_major_axis_scene = MIN_ORBIT_MULT * received.star_radius_scene;
+const received = { tic:261136679, spectral_type:"A", period_days:5.4321, t0_btjd:134.5342, semi_major_axis_scene:1.4, planet_radius_scene:0.25, star_radius_scene:0.7 };
+const MIN_ORBIT_MULT = 8;
+if (received.semi_major_axis_scene < MIN_ORBIT_MULT * received.star_radius_scene) {
+  received.semi_major_axis_scene = MIN_ORBIT_MULT * received.star_radius_scene;
+}
+let SIM_SPEED_DAYS_PER_SEC = 1.0;
+let paused = false;
+
+const simPanel = document.getElementById('sim');
+const fsBtn = document.getElementById('fsBtn');
+const pctEl = document.getElementById('pct');
+const fillEl = document.getElementById('fill');
+const smallEl = document.getElementById('small');
+const daysText = document.getElementById('daysText');
+const setProgress = (p)=>{ const v=Math.max(0,Math.min(100,p)); pctEl.textContent = v.toFixed(0)+'%'; fillEl.style.width = v+'%'; };
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0b0b);
+
+const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 1000);
+camera.position.set(0, 1.2, 3.2);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
+else renderer.outputEncoding = THREE.sRGBEncoding;
+simPanel.appendChild(renderer.domElement);
+
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.domElement.style.position = 'absolute';
+labelRenderer.domElement.style.inset = '0';
+labelRenderer.domElement.style.pointerEvents = 'none';
+labelRenderer.domElement.classList.add('css2d');
+simPanel.appendChild(labelRenderer.domElement);
+
+function sizeToPanel(){
+  const w = simPanel.clientWidth, h = simPanel.clientHeight;
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+  renderer.setSize(w, h, false);
+  labelRenderer.setSize(w, h);
+}
+sizeToPanel();
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+const key   = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set( 5, 5,  5);
+const fill  = new THREE.DirectionalLight(0xffffff, 0.55); fill.position.set(-5, 2,  5);
+const back  = new THREE.DirectionalLight(0xffffff, 0.75); back.position.set( 0, 5, -6);
+const amb   = new THREE.AmbientLight(0xffffff, 0.2);
+scene.add(key, fill, back, amb);
+
+// PLACEHOLDERS (write depth, render earlier)
+const placeholderStarMat = new THREE.MeshStandardMaterial({
+  color: 0xffcc66, emissive: 0xffaa33, emissiveIntensity: 0.6, roughness: 0.6, metalness: 0.0
+});
+const starPH = new THREE.Mesh(new THREE.SphereGeometry(received.star_radius_scene, 48, 24), placeholderStarMat);
+starPH.renderOrder = 1;
+starPH.material.depthWrite = true;
+scene.add(starPH);
+
+const planetPH = new THREE.Mesh(
+  new THREE.SphereGeometry(received.planet_radius_scene, 36, 18),
+  new THREE.MeshStandardMaterial({ color: 0xffe199, emissive: 0xffcc66, emissiveIntensity: 0.7, roughness: 0.5 })
+);
+planetPH.renderOrder = 1;
+planetPH.material.depthWrite = true;
+planetPH.position.set(received.semi_major_axis_scene, 0, 0);
+scene.add(planetPH);
+
+function sunPathForSpectral(s) {
+  const t = (s || '').toUpperCase();
+  if (t.startsWith('K') || t.startsWith('M')) return './red.glb';
+  if (t.startsWith('G') || t.startsWith('F')) return './yellow.glb';
+  return './blue.glb';
+}
+
+const manager = new THREE.LoadingManager();
+manager.onProgress = (_u, loaded, total)=>{ const p=total?(loaded/total)*100:50; setProgress(p); applyBlur(10*(1-p/100)); };
+manager.onLoad = ()=> setProgress(100);
+
+let currentBlur = 10;
+function applyBlur(px){ renderer.domElement.style.filter = `blur(${px}px)`; }
+
+const loader = new GLTFLoader(manager);
+let starReal = null, planetReal = null, reveal = 0;
+
+// REAL STAR (don’t write depth while transparent; render after placeholders)
+loader.load(sunPathForSpectral(received.spectral_type), (gltf)=>{
+  starReal = gltf.scene;
+  starReal.scale.setScalar(received.star_radius_scene);
+  starReal.traverse(o=>{
+    if (o.isMesh && o.material){
+      o.material = o.material.clone();
+      o.material.transparent = true;
+      o.material.opacity = 0;
+      o.material.depthWrite = false;
+      o.renderOrder = 2;
+    }
+  });
+  scene.add(starReal);
+  smallEl.textContent = 'Sun model loaded…';
+  reveal = Math.max(reveal, 0.001);
+});
+
+// REAL PLANET
+loader.load('./planet.glb', (gltf)=>{
+  planetReal = gltf.scene;
+  planetReal.scale.setScalar(received.planet_radius_scene);
+  planetReal.position.copy(planetPH.position);
+  planetReal.traverse(o=>{
+    if (o.isMesh && o.material){
+      o.material = o.material.clone();
+      o.material.transparent = true;
+      o.material.opacity = 0;
+      o.material.depthWrite = false;
+      o.renderOrder = 2;
+    }
+  });
+  scene.add(planetReal);
+  smallEl.textContent = 'Planet model loaded…';
+  reveal = Math.max(reveal, 0.001);
+});
+
+const TUBE_COLOR = 0x00e5ff;
+const tubeMaterial = new THREE.MeshBasicMaterial({ color: TUBE_COLOR, transparent: true, opacity: 0.95 });
+let progressMesh = null, arcStartTheta = null, lastTheta = null, orbitStartSimDays = 0;
+
+function updateProgressArc(R, startTheta, endTheta) {
+  const delta = endTheta - startTheta;
+  const steps = Math.max(8, Math.ceil(128 * (delta / (Math.PI * 2))));
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const th = startTheta + t * delta;
+    pts.push(new THREE.Vector3(Math.cos(th) * R, 0, Math.sin(th) * R));
   }
-  let SIM_SPEED_DAYS_PER_SEC = 1.0;
-  let paused = false;
+  const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.0);
+  const tubularSegments = Math.max(24, steps * 3);
+  const tubeRadius = Math.max(0.01, received.planet_radius_scene * 0.22);
+  const geom = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, 6, false);
+  if (!progressMesh) { progressMesh = new THREE.Mesh(geom, tubeMaterial); progressMesh.renderOrder = 2; scene.add(progressMesh); }
+  else { progressMesh.geometry.dispose(); progressMesh.geometry = geom; }
+}
 
-  const simPanel = document.getElementById('sim');
-  const fsBtn = document.getElementById('fsBtn');
-  const pctEl = document.getElementById('pct');
-  const fillEl = document.getElementById('fill');
-  const smallEl = document.getElementById('small');
-  const daysText = document.getElementById('daysText');
-  const setProgress = (p)=>{ const v=Math.max(0,Math.min(100,p)); pctEl.textContent = v.toFixed(0)+'%'; fillEl.style.width = v+'%'; };
+let simDays = 0, lastT = performance.now();
+function stepSim(nowMs){ const dt=(nowMs-lastT)/1000; lastT=nowMs; if(!paused) simDays += dt * SIM_SPEED_DAYS_PER_SEC; }
+const PI2 = Math.PI * 2;
+function orbitAngle(period_days, t0_btjd, current_btjd){
+  const ph = ((current_btjd - t0_btjd) / period_days) % 1; return (ph < 0 ? ph + 1 : ph) * PI2;
+}
+const currentBTJD = ()=> received.t0_btjd + simDays;
+
+function animateOrbit(tMs){
+  requestAnimationFrame(animateOrbit);
+  stepSim(tMs);
+
+  placeholderStarMat.emissiveIntensity = 0.6 + Math.sin(tMs*0.0012)*0.04;
+  starPH.rotation.y += 0.001; if (starReal) starReal.rotation.y += 0.001;
+  planetPH.rotation.y += 0.008; if (planetReal) planetReal.rotation.y += 0.01;
+
+  const R = received.semi_major_axis_scene;
+  const theta = orbitAngle(received.period_days, received.t0_btjd, currentBTJD());
+  const x = Math.cos(theta) * R, z = Math.sin(theta) * R;
+  planetPH.position.set(x, 0, z); if (planetReal) planetReal.position.set(x, 0, z);
+
+  if (arcStartTheta === null) {
+    arcStartTheta = theta; lastTheta = theta; orbitStartSimDays = simDays;
+    updateProgressArc(R, arcStartTheta, theta + 1e-6);
+  } else {
+    if (theta < lastTheta) { arcStartTheta = theta; orbitStartSimDays = simDays; updateProgressArc(R, arcStartTheta, theta + 1e-6); }
+    else { updateProgressArc(R, arcStartTheta, theta); }
+    lastTheta = theta;
+  }
+  const orbitElapsed = simDays - orbitStartSimDays;
+  daysText.textContent = `${Math.floor(orbitElapsed)} days`;
+
+  // Smooth crossfade without striping
+  if (reveal > 0 && starReal && planetReal){
+    reveal = Math.min(1, reveal + 0.03);
+    const a = reveal;
+    starReal.traverse(o=>{ if (o.isMesh && o.material) o.material.opacity = a; });
+    planetReal.traverse(o=>{ if (o.isMesh && o.material) o.material.opacity = a; });
+
+    if (a >= 0.6) { starPH.visible = false; planetPH.visible = false; } // prevent overlap artifacts
+
+    applyBlur(Math.max(0, (1-a)*10));
+    if (a === 1){ document.getElementById('hud').style.display='none'; applyBlur(0); }
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+}
+applyBlur(currentBlur);
+animateOrbit(0);
+
+// nudge size on next frame for some browsers
+requestAnimationFrame(()=> window.dispatchEvent(new Event('resize')));
+
+addEventListener('resize', sizeToPanel);
+document.addEventListener('fullscreenchange', sizeToPanel);
+fsBtn.addEventListener('click', async ()=>{
+  if (!document.fullscreenElement){ await simPanel.requestFullscreen(); fsBtn.textContent='Exit Fullscreen'; }
+  else { await document.exitFullscreen(); fsBtn.textContent='Enter Fullscreen'; }
+  sizeToPanel();
+});
+
+addEventListener('keydown', (e)=>{
+  if (e.key === '[') { SIM_SPEED_DAYS_PER_SEC = Math.max(0.01, SIM_SPEED_DAYS_PER_SEC / 1.5); smallEl.textContent = `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s (slower)`; }
+  else if (e.key === ']') { SIM_SPEED_DAYS_PER_SEC = Math.min(1e3, SIM_SPEED_DAYS_PER_SEC * 1.5); smallEl.textContent = `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s (faster)`; }
+  else if (e.code === 'Space') { paused = !paused; smallEl.textContent = paused ? 'Paused' : `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s`; }
+});
+
+/* ====================== EARTH VIEWER ====================== */
+(function initEarthViewer(){
+  const panel   = document.getElementById('earthPanel');
+  const fsBtn   = document.getElementById('earthFsBtn');
+  const pctEl   = document.getElementById('earthPct');
+  const fillEl  = document.getElementById('earthFill');
+  const smallEl = document.getElementById('earthSmall');
+
+  function setEarthProgress(p){
+    const v = Math.max(0, Math.min(100, p));
+    pctEl.textContent = v.toFixed(0) + '%';
+    fillEl.style.width = v + '%';
+  }
+  function sizeEarthToPanel(camera, renderer){
+    const w = panel.clientWidth, h = panel.clientHeight;
+    camera.aspect = w / h; camera.updateProjectionMatrix();
+    renderer.setSize(w, h, false);
+  }
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0b0b0b);
 
   const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 1000);
-  camera.position.set(0, 1.2, 3.2);
+  camera.position.set(0, 0.8, 2.2);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
   else renderer.outputEncoding = THREE.sRGBEncoding;
-  simPanel.appendChild(renderer.domElement);
-
-  const labelRenderer = new CSS2DRenderer();
-  labelRenderer.domElement.style.position = 'absolute';
-  labelRenderer.domElement.style.inset = '0';
-  labelRenderer.domElement.style.pointerEvents = 'none';
-  labelRenderer.domElement.classList.add('css2d');
-  simPanel.appendChild(labelRenderer.domElement);
-
-  function sizeToPanel(){
-    const w = simPanel.clientWidth, h = simPanel.clientHeight;
-    camera.aspect = w / h; camera.updateProjectionMatrix();
-    renderer.setSize(w, h, false);
-    labelRenderer.setSize(w, h);
-  }
-  sizeToPanel();
+  panel.appendChild(renderer.domElement);
+  sizeEarthToPanel(camera, renderer);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
 
-  const key   = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set( 5, 5,  5);
-  const fill  = new THREE.DirectionalLight(0xffffff, 0.55); fill.position.set(-5, 2,  5);
-  const back  = new THREE.DirectionalLight(0xffffff, 0.75); back.position.set( 0, 5, -6);
-  const amb   = new THREE.AmbientLight(0xffffff, 0.2);
-  scene.add(key, fill, back, amb);
+  const amb  = new THREE.AmbientLight(0xffffff, 0.35);
+  const key  = new THREE.DirectionalLight(0xffffff, 1.1); key.position.set( 5, 4,  6);
+  const rim  = new THREE.DirectionalLight(0x99b7ff, 0.6); rim.position.set(-6, 2, -4);
+  const hemi = new THREE.HemisphereLight(0x668cff, 0x0a0c11, 0.3);
+  scene.add(amb, key, rim, hemi);
 
-  const placeholderStarMat = new THREE.MeshStandardMaterial({
-    color: 0xffcc66, emissive: 0xffaa33, emissiveIntensity: 0.6, roughness: 0.6, metalness: 0.0
-  });
-  const starPH = new THREE.Mesh(new THREE.SphereGeometry(received.star_radius_scene, 48, 24), placeholderStarMat);
-  scene.add(starPH);
-
-  const planetPH = new THREE.Mesh(
-    new THREE.SphereGeometry(received.planet_radius_scene, 36, 18),
-    new THREE.MeshStandardMaterial({ color: 0xffe199, emissive: 0xffcc66, emissiveIntensity: 0.7, roughness: 0.5 })
-  );
-  planetPH.position.set(received.semi_major_axis_scene, 0, 0);
-  scene.add(planetPH);
-
-  function sunPathForSpectral(s) {
-    const t = (s || '').toUpperCase();
-    if (t.startsWith('K') || t.startsWith('M')) return './red.glb';
-    if (t.startsWith('G') || t.startsWith('F')) return './yellow.glb';
-    return './blue.glb';
-  }
+  function applyEarthBlur(px){ renderer.domElement.style.filter = `blur(${px}px)`; }
+  let blur = 10; applyEarthBlur(blur);
 
   const manager = new THREE.LoadingManager();
-  manager.onProgress = (_u, loaded, total)=>{ const p=total?(loaded/total)*100:50; setProgress(p); applyBlur(10*(1-p/100)); };
-  manager.onLoad = ()=> setProgress(100);
-
-  let currentBlur = 10;
-  function applyBlur(px){ renderer.domElement.style.filter = `blur(${px}px)`; }
+  manager.onProgress = (_url, loaded, total)=>{ const p = total ? (loaded/total)*100 : 50; setEarthProgress(p); blur = 10 * (1 - p/100); applyEarthBlur(blur); };
+  manager.onLoad = ()=>{ setEarthProgress(100); applyEarthBlur(0); document.getElementById('earthHud').style.display = 'none'; };
 
   const loader = new GLTFLoader(manager);
-  let starReal = null, planetReal = null, reveal = 0;
+  let earth = null, earthCore = null;
 
-  loader.load(sunPathForSpectral(received.spectral_type), (gltf)=>{
-    starReal = gltf.scene;
-    starReal.scale.setScalar(received.star_radius_scene);
-    starReal.traverse(o=>{ if (o.isMesh && o.material){ o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0; }});
-    scene.add(starReal);
-    smallEl.textContent = 'Sun model loaded…';
-    reveal = Math.max(reveal, 0.001);
-  });
+  const PIN_MAT = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
+  const PIN_CONE = new THREE.ConeGeometry(0.03, 0.12, 16);
+  const PIN_RING = new THREE.TorusGeometry(0.045, 0.008, 8, 24);
+  PIN_MAT.polygonOffset = true; PIN_MAT.polygonOffsetFactor = -1; PIN_MAT.polygonOffsetUnits = -1;
 
-  loader.load('./planet.glb', (gltf)=>{
-    planetReal = gltf.scene;
-    planetReal.scale.setScalar(received.planet_radius_scene);
-    planetReal.position.copy(planetPH.position);
-    planetReal.traverse(o=>{ if (o.isMesh && o.material){ o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0; }});
-    scene.add(planetReal);
-    smallEl.textContent = 'Planet model loaded…';
-    reveal = Math.max(reveal, 0.001);
-  });
-
-  const TUBE_COLOR = 0x00e5ff;
-  const tubeMaterial = new THREE.MeshBasicMaterial({ color: TUBE_COLOR, transparent: true, opacity: 0.95 });
-  let progressMesh = null, arcStartTheta = null, lastTheta = null, orbitStartSimDays = 0;
-
-  function updateProgressArc(R, startTheta, endTheta) {
-    const delta = endTheta - startTheta;
-    const steps = Math.max(8, Math.ceil(128 * (delta / (Math.PI * 2))));
-    const pts = [];
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      const th = startTheta + t * delta;
-      pts.push(new THREE.Vector3(Math.cos(th) * R, 0, Math.sin(th) * R));
-    }
-    const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.0);
-    const tubularSegments = Math.max(24, steps * 3);
-    const tubeRadius = Math.max(0.01, received.planet_radius_scene * 0.22);
-    const geom = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, 6, false);
-    if (!progressMesh) { progressMesh = new THREE.Mesh(geom, tubeMaterial); progressMesh.renderOrder = 2; scene.add(progressMesh); }
-    else { progressMesh.geometry.dispose(); progressMesh.geometry = geom; }
+  let activePins = [];
+  function createPin(){
+    const g = new THREE.Group();
+    const cone = new THREE.Mesh(PIN_CONE, PIN_MAT);
+    const ring = new THREE.Mesh(PIN_RING, PIN_MAT);
+    cone.position.y = 0.06;
+    ring.rotation.x = Math.PI/2;
+    g.add(cone, ring);
+    return g;
   }
 
-  let simDays = 0, lastT = performance.now();
-  function stepSim(nowMs){ const dt=(nowMs-lastT)/1000; lastT=nowMs; if(!paused) simDays += dt * SIM_SPEED_DAYS_PER_SEC; }
-  const PI2 = Math.PI * 2;
-  function orbitAngle(period_days, t0_btjd, current_btjd){
-    const ph = ((current_btjd - t0_btjd) / period_days) % 1; return (ph < 0 ? ph + 1 : ph) * PI2;
+  function getEarthRadiusLocal(){ return 1.0; }
+  function toGlobe(lat, lon) { return { lat: lat - 7, lon: ((lon + 80 + 180) % 360) - 180 }; }
+  function latLonToLocal(latDeg, lonDeg, rLocal) {
+    const lat = THREE.MathUtils.degToRad(latDeg);
+    const lon = THREE.MathUtils.degToRad(-lonDeg);
+    const dir = new THREE.Vector3(
+      Math.cos(lat) * Math.cos(lon),
+      Math.sin(lat),
+      Math.cos(lat) * Math.sin(lon)
+    ).normalize();
+    return dir.multiplyScalar(rLocal);
   }
-  const currentBTJD = ()=> received.t0_btjd + simDays;
 
-  function animateOrbit(tMs){
-    requestAnimationFrame(animateOrbit);
-    stepSim(tMs);
-    placeholderStarMat.emissiveIntensity = 0.6 + Math.sin(tMs*0.0012)*0.04;
-    starPH.rotation.y += 0.001; if (starReal) starReal.rotation.y += 0.001;
-    planetPH.rotation.y += 0.008; if (planetReal) planetReal.rotation.y += 0.01;
-
-    const R = received.semi_major_axis_scene;
-    const theta = orbitAngle(received.period_days, received.t0_btjd, currentBTJD());
-    const x = Math.cos(theta) * R, z = Math.sin(theta) * R;
-    planetPH.position.set(x, 0, z); if (planetReal) planetReal.position.set(x, 0, z);
-
-    if (arcStartTheta === null) {
-      arcStartTheta = theta; lastTheta = theta; orbitStartSimDays = simDays;
-      updateProgressArc(R, arcStartTheta, theta + 1e-6);
-    } else {
-      if (theta < lastTheta) { arcStartTheta = theta; orbitStartSimDays = simDays; updateProgressArc(R, arcStartTheta, theta + 1e-6); }
-      else { updateProgressArc(R, arcStartTheta, theta); }
-      lastTheta = theta;
-    }
-    const orbitElapsed = simDays - orbitStartSimDays;
-    daysText.textContent = `${Math.floor(orbitElapsed)} days`;
-
-    if (reveal > 0 && starReal && planetReal){
-      reveal = Math.min(1, reveal + 0.03);
-      const realOpacity = reveal;
-      starReal.traverse(o=>{ if (o.isMesh && o.material) o.material.opacity = realOpacity; });
-      planetReal.traverse(o=>{ if (o.isMesh && o.material) o.material.opacity = realOpacity; });
-      applyBlur(Math.max(0, (1-reveal)*10));
-      if (reveal === 1){ document.getElementById('hud').style.display='none'; applyBlur(0); }
-    }
-
-    controls.update();
-    renderer.render(scene, camera);
-    labelRenderer.render(scene, camera);
-  }
-  applyBlur(10);
-  animateOrbit(0);
-
-  // sizing nudge on next frame (prevents 0×0 canvas on some loads)
-  requestAnimationFrame(()=> window.dispatchEvent(new Event('resize')));
-
-  addEventListener('resize', sizeToPanel);
-  document.addEventListener('fullscreenchange', sizeToPanel);
-  fsBtn.addEventListener('click', async ()=>{
-    if (!document.fullscreenElement){ await simPanel.requestFullscreen(); fsBtn.textContent='Exit Fullscreen'; }
-    else { await document.exitFullscreen(); fsBtn.textContent='Enter Fullscreen'; }
-    sizeToPanel();
-  });
-
-  addEventListener('keydown', (e)=>{
-    if (e.key === '[') { SIM_SPEED_DAYS_PER_SEC = Math.max(0.01, SIM_SPEED_DAYS_PER_SEC / 1.5); smallEl.textContent = `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s (slower)`; }
-    else if (e.key === ']') { SIM_SPEED_DAYS_PER_SEC = Math.min(1e3, SIM_SPEED_DAYS_PER_SEC * 1.5); smallEl.textContent = `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s (faster)`; }
-    else if (e.code === 'Space') { paused = !paused; smallEl.textContent = paused ? 'Paused' : `Speed: ${SIM_SPEED_DAYS_PER_SEC.toFixed(2)} d/s`; }
-  });
-
-  /* ====================== EARTH VIEWER ====================== */
-  (function initEarthViewer(){
-    const panel   = document.getElementById('earthPanel');
-    const fsBtn   = document.getElementById('earthFsBtn');
-    const pctEl   = document.getElementById('earthPct');
-    const fillEl  = document.getElementById('earthFill');
-    const smallEl = document.getElementById('earthSmall');
-
-    function setEarthProgress(p){
-      const v = Math.max(0, Math.min(100, p));
-      pctEl.textContent = v.toFixed(0) + '%';
-      fillEl.style.width = v + '%';
-    }
-    function sizeEarthToPanel(camera, renderer){
-      const w = panel.clientWidth, h = panel.clientHeight;
-      camera.aspect = w / h; camera.updateProjectionMatrix();
-      renderer.setSize(w, h, false);
-    }
-
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0b0b0b);
-
-    const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 1000);
-    camera.position.set(0, 0.8, 2.2);
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
-    else renderer.outputEncoding = THREE.sRGBEncoding;
-    panel.appendChild(renderer.domElement);
-    sizeEarthToPanel(camera, renderer);
-
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-
-    const amb  = new THREE.AmbientLight(0xffffff, 0.35);
-    const key  = new THREE.DirectionalLight(0xffffff, 1.1); key.position.set( 5, 4,  6);
-    const rim  = new THREE.DirectionalLight(0x99b7ff, 0.6); rim.position.set(-6, 2, -4);
-    const hemi = new THREE.HemisphereLight(0x668cff, 0x0a0c11, 0.3);
-    scene.add(amb, key, rim, hemi);
-
-    function applyEarthBlur(px){ renderer.domElement.style.filter = `blur(${px}px)`; }
-    let blur = 10; applyEarthBlur(blur);
-
-    const manager = new THREE.LoadingManager();
-    manager.onProgress = (_url, loaded, total)=>{ const p = total ? (loaded/total)*100 : 50; setEarthProgress(p); blur = 10 * (1 - p/100); applyEarthBlur(blur); };
-    manager.onLoad = ()=>{ setEarthProgress(100); applyEarthBlur(0); document.getElementById('earthHud').style.display = 'none'; };
-
-    const loader = new GLTFLoader(manager);
-    let earth = null, earthCore = null;
-
-    const PIN_MAT = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
-    const PIN_CONE = new THREE.ConeGeometry(0.03, 0.12, 16);
-    const PIN_RING = new THREE.TorusGeometry(0.045, 0.008, 8, 24);
-    PIN_MAT.polygonOffset = true; PIN_MAT.polygonOffsetFactor = -1; PIN_MAT.polygonOffsetUnits = -1;
-
-    let activePins = [];
-    function createPin(){
-      const g = new THREE.Group();
-      const cone = new THREE.Mesh(PIN_CONE, PIN_MAT);
-      const ring = new THREE.Mesh(PIN_RING, PIN_MAT);
-      cone.position.y = 0.06;
-      ring.rotation.x = Math.PI/2;
-      g.add(cone, ring);
-      return g;
-    }
-
-    function getEarthRadiusLocal(){ return 1.0; }
-    function toGlobe(lat, lon) { return { lat: lat - 7, lon: ((lon + 80 + 180) % 360) - 180 }; }
-    function latLonToLocal(latDeg, lonDeg, rLocal) {
-      const lat = THREE.MathUtils.degToRad(latDeg);
-      const lon = THREE.MathUtils.degToRad(-lonDeg);
-      const dir = new THREE.Vector3(
-        Math.cos(lat) * Math.cos(lon),
-        Math.sin(lat),
-        Math.cos(lat) * Math.sin(lon)
-      ).normalize();
-      return dir.multiplyScalar(rLocal);
-    }
-
-    function placeRegionPins(regions){
-      if (!earth) return;
-      for (const p of activePins) earth.remove(p);
-      activePins = [];
-      const r = getEarthRadiusLocal();
-      for (const bundle of regions){
-        for (const {lat, lon} of bundle){
-          const g = toGlobe(lat, lon);
-          const pos = latLonToLocal(g.lat, g.lon, r);
-          const pin = createPin();
-          pin.position.copy(pos);
-          pin.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), pos.clone().normalize());
-          earth.add(pin);
-          activePins.push(pin);
-        }
+  function placeRegionPins(regions){
+    if (!earth) return;
+    for (const p of activePins) earth.remove(p);
+    activePins = [];
+    const r = getEarthRadiusLocal();
+    for (const bundle of regions){
+      for (const {lat, lon} of bundle){
+        const g = toGlobe(lat, lon);
+        const pos = latLonToLocal(g.lat, g.lon, r);
+        const pin = createPin();
+        pin.position.copy(pos);
+        pin.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), pos.clone().normalize());
+        earth.add(pin);
+        activePins.push(pin);
       }
     }
-    window.placeRegionPins = placeRegionPins;
+  }
+  window.placeRegionPins = placeRegionPins;
 
-    loader.load('./earth.glb', (gltf)=>{
-      earth = gltf.scene;
-      earth.traverse(o=>{
-        if (o.isMesh) {
-          o.material = o.material.clone();
-          if (!earthCore) earthCore = o;
-          else{
-            const a = earthCore.geometry?.boundingSphere?.radius || 0;
-            const b = o.geometry?.boundingSphere?.radius || 0;
-            if (b > a) earthCore = o;
-          }
+  loader.load('./earth.glb', (gltf)=>{
+    earth = gltf.scene;
+    earth.traverse(o=>{
+      if (o.isMesh) {
+        o.material = o.material.clone();
+        if (!earthCore) earthCore = o;
+        else{
+          const a = earthCore.geometry?.boundingSphere?.radius || 0;
+          const b = o.geometry?.boundingSphere?.radius || 0;
+          if (b > a) earthCore = o;
         }
-      });
-      if (earthCore && !earthCore.geometry.boundingSphere) earthCore.geometry.computeBoundingSphere();
-      scene.add(earth);
-
-      // Demo pins
-      placeRegionPins([
-        [ {lat:-1, lon:33}, {lat:0, lon:32.7}, {lat:1, lon:33.2} ],
-        [ {lat:30.044, lon:31.235}, {lat:29.95, lon:31.4} ]
-      ]);
-    }, undefined, (err)=> smallEl.textContent = 'Load error: ' + (err?.message || err));
-
-    function animate(){
-      requestAnimationFrame(animate);
-      if (earth) earth.rotation.y += 0.0018;
-      controls.update();
-      renderer.render(scene, camera);
-    }
-    animate();
-
-    const onResize = ()=> sizeEarthToPanel(camera, renderer);
-    addEventListener('resize', onResize);
-    document.addEventListener('fullscreenchange', onResize);
-    fsBtn.addEventListener('click', async ()=>{
-      if (!document.fullscreenElement){ await panel.requestFullscreen(); fsBtn.textContent='Exit Fullscreen'; }
-      else { await document.exitFullscreen(); fsBtn.textContent='Enter Fullscreen'; }
-      sizeEarthToPanel(camera, renderer);
+      }
     });
-  })();
+    if (earthCore && !earthCore.geometry.boundingSphere) earthCore.geometry.computeBoundingSphere();
+    scene.add(earth);
+
+    placeRegionPins([
+      [ {lat:-1, lon:33}, {lat:0, lon:32.7}, {lat:1, lon:33.2} ],
+      [ {lat:30.044, lon:31.235}, {lat:29.95, lon:31.4} ]
+    ]);
+  }, undefined, (err)=> smallEl.textContent = 'Load error: ' + (err?.message || err));
+
+  function animate(){
+    requestAnimationFrame(animate);
+    if (earth) earth.rotation.y += 0.0018;
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  const onResize = ()=> sizeEarthToPanel(camera, renderer);
+  addEventListener('resize', onResize);
+  document.addEventListener('fullscreenchange', onResize);
+  fsBtn.addEventListener('click', async ()=>{
+    if (!document.fullscreenElement){ await panel.requestFullscreen(); fsBtn.textContent='Exit Fullscreen'; }
+    else { await document.exitFullscreen(); fsBtn.textContent='Enter Fullscreen'; }
+    sizeEarthToPanel(camera, renderer);
+  });
+})();
 </script>
 </body>
 </html>
