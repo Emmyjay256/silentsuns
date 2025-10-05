@@ -471,7 +471,7 @@ function updateProgressArc(R, startTheta, endTheta) {
   }
   const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.0);
   const tubularSegments = Math.max(24, steps * 3);
-  const tubeRadius = Math.max(0.01, received.planet_radius_scene * 0.22);
+  const tubeRadius = Math.max(0.01, received.planet_radius_scene * 0.05);
   const geom = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, 6, false);
   if (!progressMesh) { progressMesh = new THREE.Mesh(geom, tubeMaterial); progressMesh.renderOrder = 2; scene.add(progressMesh); }
   else { progressMesh.geometry.dispose(); progressMesh.geometry = geom; }
