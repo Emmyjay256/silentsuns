@@ -278,14 +278,14 @@
 <!-- AI insights -->
     <div class="card ai-card">
   <div class="ai-header">AI Insights</div>
-  <div class="ai-content"></div>
+  <div class="ai-content">
 <div id="space-message" style="
   color:#fff;
   font-family: monospace;
   font-size: 1.5rem;
   text-align: center;
   transition: opacity .4s;
-"></div>
+"></div></div>
       
 </div>
 
@@ -364,6 +364,46 @@
   // Start immediately, then every 4s
   fetchAiPhrase();
   setInterval(fetchAiPhrase, 4000);
+</script>
+
+
+  <script>
+  // ==== AI write-up from inference JSON ====
+  async function pushInferenceToAI(d) {
+    try {
+      // Build a compact, informative prompt from your inference fields
+      const prompt = `
+Write a clear 4–6 sentence, non-technical summary of this exoplanet detection.
+No markdown, no lists. Keep it under 120 words.
+
+Data:
+- Class: ${d.class ?? 'unknown'}
+- Confidence: ${d.pred_prob ? (d.pred_prob * 100).toFixed(1) + '%' : '—'}
+- Period (days): ${d.period_days ?? '—'}
+- Transit depth (ppm): ${d.depth_ppm ?? '—'}
+- Estimated radius (R⊕/R♃): ${d.planet_radius_re ?? d.planet_radius_rj ?? '—'}
+- Host: ${(d.host_id_type ?? '').toUpperCase()} ${d.host_id ?? d.target_id ?? '—'}
+- Next transit (BTJD): ${d.next_transit_btjd ?? d.t0_btjd ?? '—'}
+
+End with one line hinting that visibility aligns with the highlighted globe regions if shown.`.trim();
+
+      const res = await fetch(ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt })
+      });
+
+      const j = await res.json();
+      const text = (j && j.reply ? String(j.reply).trim() : '') || 'AI summary unavailable.';
+
+      const box = document.querySelector(".ai-card .ai-content");
+      if (box) box.textContent = text;
+    } catch (err) {
+      console.error("pushInferenceToAI failed:", err);
+      const box = document.querySelector(".ai-card .ai-content");
+      if (box) box.textContent = "AI summary unavailable.";
+    }
+  }
 </script>
 
 <script type="module">
@@ -1042,6 +1082,7 @@ if (d.period_days && d.t0_btjd) {
   simDays = 0;
   arcStartTheta = null;
 }
+                await pushInferenceToAI(d);
 
 
 
