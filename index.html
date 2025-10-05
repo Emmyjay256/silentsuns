@@ -620,35 +620,36 @@ function putWithProgress(url, file, contentTypeOrNull, onProgress){
 }
 
 function pollJob(jobId, onUpdate) {
-  const url = `${JOB_STATUS_BASE}/${encodeURIComponent(jobId)}`;
+  const base = `${JOB_STATUS_BASE}/${encodeURIComponent(jobId)}`;
   let timerId = null;
   let done = false;
 
   async function tick() {
+    // Cache-bust without adding non-safelisted headers
+    const url = `${base}?_=${Date.now()}`;
+
     try {
-      // cache-bust every request so we never read a stale status.json
-      const r = await fetch(`${url}?_=${Date.now()}`, {
-        cache: "no-store",
-        mode: "cors",
-        headers: { "Cache-Control": "no-cache" }
-      });
+      const r = await fetch(url, { mode: "cors" }); // <-- no cache:'no-store', no headers
       if (!r.ok) return;
 
       const s = await r.json();
       console.log("[pollJob] Response:", s);
-      onUpdate?.(s);
 
-      // treat any visible output URLs as completion
-      const hasOutputs =
-        s.inference_json || s.plot_png || s.curve_csv || s.features_json;
+      // Never let UI errors kill the loop
+      try { onUpdate && onUpdate(s); } catch (uiErr) {
+        console.warn("[pollJob] onUpdate handler threw:", uiErr);
+      }
 
+      // Consider finished if state is terminal OR any outputs exist
+      const hasOutputs = !!(s.inference_json || s.plot_png || s.curve_csv || s.features_json);
       if (!done && (s.state === "done" || s.state === "error" || hasOutputs)) {
         done = true;
         clearInterval(timerId);
-        console.log("[pollJob] Job considered complete (state or outputs found)");
+        console.log("[pollJob] Stopped (state/output reached).");
       }
     } catch (e) {
-      console.warn("[pollJob] Error", e);
+      // Swallow transient network errors; keep polling
+      console.warn("[pollJob] fetch failed:", e);
     }
   }
 
