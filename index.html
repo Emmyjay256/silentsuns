@@ -240,7 +240,8 @@
 <script type="module">
 /* ====================== Upload plumbing (client CORS-safe) ====================== */
 const GET_UPLOAD_URL = 'https://us-central1-silent-suns.cloudfunctions.net/get_upload_url';
-const JOB_STATUS_BASE = 'https://us-central1-silent-suns.cloudfunctions.net/jobs'; // optional
+
+const JOB_STATUS_BASE = 'https://us-central1-silent-suns.cloudfunctions.net/get_job_status';
 
 const dz = document.getElementById('dz');
 const fileInput = document.getElementById('fileInput');
