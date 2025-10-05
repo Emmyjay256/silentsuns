@@ -346,11 +346,18 @@ function pollJob(jobId, onUpdate){
   const url = `${JOB_STATUS_BASE}/${encodeURIComponent(jobId)}`;
   const tick = async ()=>{
     try{
+      console.log("[pollJob] Fetching:", url);  // 👈 ADD THIS
       const r = await fetch(url, {cache:'no-store', mode:'cors'});
-      if (r.ok){ const s = await r.json(); onUpdate?.(s); if (s.state==='done'||s.state==='error') clearInterval(t); }
-    }catch(e){ /* keep trying */ }
+      if (r.ok){
+        const s = await r.json();
+        console.log("[pollJob] Response:", s);  // 👈 ADD THIs
+        onUpdate?.(s);
+        if (s.state==='done'||s.state==='error') clearInterval(t);
+      }
+    }catch(e){ console.warn("[pollJob] Error", e); }
   };
-  const t = setInterval(tick, 2500); tick();
+  const t = setInterval(tick, 2500);
+  tick();
 }
 
 /* ====================== ORBIT SIM (striping-free crossfade) ====================== */
@@ -737,7 +744,7 @@ const JobWatcher = (() => {
 
     let done = false;
     async function poll() {
-      try {
+      try {console.log("[JobWatcher] polling", `${BASE}/${jobId}`);
         const res = await fetch(`${BASE}/${encodeURIComponent(jobId)}`, { cache: 'no-store', mode: 'cors' });
         if (!res.ok) return;
         const j = await res.json();
@@ -759,7 +766,7 @@ const JobWatcher = (() => {
           if (j.inference_json) {
             fetch(j.inference_json)
               .then(r => r.json())
-              .then(d => {
+              .then(d => {console.log("[JobWatcher] response", j);
                 const p = (d.pred_prob * 100).toFixed(1);
                 const jsonStr = JSON.stringify(d, null, 2);
                 infoEl.innerHTML += `
