@@ -285,17 +285,36 @@ async function handleFile(file){
 
     // 3) Optional job polling
     if (jobId && JOB_STATUS_BASE) pollJob(jobId, (status)=>{
-      if (status.state === 'done'){
-        const a = [];
-        if (status.curve_csv)     a.push(`<a href="${status.curve_csv}" target="_blank">curve CSV</a>`);
-        if (status.features_json) a.push(`<a href="${status.features_json}" target="_blank">features JSON</a>`);
-        if (status.plot_png)      a.push(`<a href="${status.plot_png}" target="_blank">plot</a>`);
-        afterText.innerHTML = '✅ Done — ' + a.join(' · ');
-        show(progRow,false);
-      } else if (status.state === 'error'){
-        afterText.textContent = '❌ Processing error: ' + (status.error||'unknown');
-        show(progRow,false);
-      }
+      if (status.state === 'done') {
+  const a = [];
+  if (status.curve_csv)     a.push(`<a href="${status.curve_csv}" target="_blank">curve CSV</a>`);
+  if (status.features_json) a.push(`<a href="${status.features_json}" target="_blank">features JSON</a>`);
+  if (status.plot_png)      a.push(`<a href="${status.plot_png}" target="_blank">plot</a>`);
+  if (status.inference_json) a.push(`<a href="${status.inference_json}" target="_blank">inference JSON</a>`);
+
+  afterText.innerHTML = '✅ Done — ' + a.join(' · ');
+  show(progRow, false);
+
+  // Auto-fetch inference results if available
+  if (status.inference_json) {
+    fetch(status.inference_json)
+      .then(r => r.json())
+      .then(j => {
+        const p = (j.pred_prob * 100).toFixed(1);
+        const next = j.next_transit_btjd.toFixed(3);
+        afterText.innerHTML += `
+          <div style="margin-top:8px;font-size:13px;color:#9cf">
+            <b>Prediction:</b> ${j.class.toUpperCase()} (${p}% confidence)<br>
+            <b>Next transit (BTJD):</b> ${next}<br>
+            <b>Period:</b> ${j.period_days.toFixed(4)} days |
+            <b>Depth:</b> ${j.depth_ppm.toFixed(0)} ppm
+          </div>`;
+      })
+      .catch(err => {
+        console.warn('Failed to load inference JSON', err);
+      });
+  }
+}
     });
 
   }catch(err){
