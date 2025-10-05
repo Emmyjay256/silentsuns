@@ -238,6 +238,107 @@
   </div>
 
 <script type="module">
+
+
+  // ---------- Tiny fetchers (MAST; CORS OK) ----------
+async function fetchJSON(url) {
+  const r = await fetch(url, { mode: 'cors', cache: 'no-store' });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+async function fetchTICbyId(ticId) {
+  return fetchJSON(`https://catalogs.mast.stsci.edu/api/v0/TIC/TICID/${encodeURIComponent(ticId)}`);
+}
+async function fetchKICbyId(kicId) {
+  return fetchJSON(`https://catalogs.mast.stsci.edu/api/v0/Kepler/kic/kicID/${encodeURIComponent(kicId)}`);
+}
+
+// ---------- Time conversions ----------
+function jdFromBTJD(btjd) { return 2457000.0 + btjd; }     // BTJD -> JD
+function jdFromUTC(date) {                                 // UTC Date -> JD
+  const t = date.getTime()/86400000 + 2440587.5; return t;
+}
+
+// ---------- Sidereal time + alt/az math ----------
+const D2R = Math.PI/180, R2D = 180/Math.PI;
+function normRange(x, m){ return x - m*Math.floor(x/m); }  // wrap x into [0,m)
+function gmstHours(jd){                                     // ~Meeus approx
+  const d = jd - 2451545.0;
+  const h = 18.697374558 + 24.06570982441908*d;
+  return normRange(h, 24);
+}
+function lstRad(lonDeg, jd){                                // LST in radians
+  const lstH = gmstHours(jd) + lonDeg/15;
+  return normRange(lstH, 24) * (Math.PI/12);
+}
+function altDeg(latDeg, lonDeg, raDeg, decDeg, jd){         // altitude (deg)
+  const φ = latDeg*D2R, δ = decDeg*D2R;
+  const H = lstRad(lonDeg, jd) - (raDeg*D2R);
+  const sinAlt = Math.sin(φ)*Math.sin(δ) + Math.cos(φ)*Math.cos(δ)*Math.cos(H);
+  return Math.asin(Math.max(-1, Math.min(1, sinAlt))) * R2D;
+}
+
+// ---------- Crude solar RA/Dec (good enough for day/night cut) ----------
+function sunRaDecDeg(jd){
+  const n = jd - 2451545.0;
+  const L = (280.460 + 0.9856474*n)*D2R;
+  const g = (357.528 + 0.9856003*n)*D2R;
+  const lam = L + (1.915*Math.sin(g) + 0.020*Math.sin(2*g))*D2R;
+  const eps = (23.439 - 0.0000004*n)*D2R;
+  const α = Math.atan2(Math.cos(eps)*Math.sin(lam), Math.cos(lam));
+  const δ = Math.asin(Math.sin(eps)*Math.sin(lam));
+  let ra = α*R2D; if (ra<0) ra+=360;
+  return { raDeg: ra, decDeg: δ*R2D };
+}
+function sunAltDeg(lat, lon, jd){
+  const { raDeg, decDeg } = sunRaDecDeg(jd);
+  return altDeg(lat, lon, raDeg, decDeg, jd);
+}
+
+// ---------- Build visibility pins ----------
+function computeVisibilityPins(raDeg, decDeg, jdMid, durationHours=2){
+  // Use mid-transit instant; you can expand to check a few samples across the window.
+  const ALT_MIN = 20;        // star higher than this
+  const SUN_ALT_MAX = -12;   // and it's night-ish
+  const latStep = 10, lonStep = 10;
+
+  const points = [];
+  for (let lat=-60; lat<=60; lat+=latStep){      // keep poles light to avoid clutter
+    for (let lon=-180; lon<=180; lon+=lonStep){
+      const alt = altDeg(lat, lon, raDeg, decDeg, jdMid);
+      const sAlt = sunAltDeg(lat, lon, jdMid);
+      if (alt >= ALT_MIN && sAlt <= SUN_ALT_MAX){
+        points.push({lat, lon});
+      }
+    }
+  }
+
+  // Group nearby points into small bundles (for your globe API signature)
+  const bundles = [];
+  const bucket = new Map();
+  const keyOf = (p)=> `${Math.round(p.lat/20)*20},${Math.round(p.lon/20)*20}`;
+  for (const p of points){
+    const k = keyOf(p);
+    if (!bucket.has(k)) bucket.set(k, []);
+    bucket.get(k).push(p);
+  }
+  for (const arr of bucket.values()){
+    // take up to 3 reps per cell to keep it light
+    bundles.push(arr.slice(0,3));
+  }
+  return bundles;
+}
+
+
+
+Object.assign(window, {
+  fetchTICbyId, fetchKICbyId,
+  jdFromBTJD, jdFromUTC,
+  computeVisibilityPins
+});
+
+
+  
 /* ====================== Upload plumbing (client CORS-safe) ====================== */
 const GET_UPLOAD_URL = 'https://us-central1-silent-suns.cloudfunctions.net/get_upload_url';
 
@@ -766,25 +867,73 @@ const JobWatcher = (() => {
           if (j.inference_json) {
             fetch(j.inference_json)
               .then(r => r.json())
-              .then(d => {console.log("[JobWatcher] response", j);
-                const p = (d.pred_prob * 100).toFixed(1);
-                const jsonStr = JSON.stringify(d, null, 2);
-                infoEl.innerHTML += `
-                  <div style="margin-top:8px;font-size:13px;color:#9cf">
-                    <b>Prediction:</b> ${d.class.toUpperCase()} (${p}% confidence)<br>
-                    <b>Period:</b> ${d.period_days.toFixed(4)} days |
-                    <b>Depth:</b> ${d.depth_ppm.toFixed(0)} ppm<br>
-                    <b>Next Transit (BTJD):</b> ${d.next_transit_btjd.toFixed(3)}<br>
-                    <button id="dlBtn" style="margin-top:8px;background:#131721;border:1px solid #2a2e3a;color:#eaf6ff;padding:6px 10px;border-radius:8px;cursor:pointer;">Download JSON</button>
-                  </div>`;
-                host.querySelector('#dlBtn').addEventListener('click', () => {
-                  const blob = new Blob([jsonStr], { type: 'application/json' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url; a.download = `inference_${jobId}.json`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                });
+              .then(d => {.then(async d => {
+  console.log("[JobWatcher] response", j);
+
+  // --- keep your UI bits ---
+  const p = (d.pred_prob * 100).toFixed(1);
+  const jsonStr = JSON.stringify(d, null, 2);
+  infoEl.innerHTML += `
+    <div style="margin-top:8px;font-size:13px;color:#9cf">
+      <b>Prediction:</b> ${d.class.toUpperCase()} (${p}% confidence)<br>
+      <b>Period:</b> ${d.period_days.toFixed(4)} days |
+      <b>Depth:</b> ${d.depth_ppm.toFixed(0)} ppm<br>
+      <b>Next Transit (BTJD):</b> ${(d.next_transit_btjd ?? d.t0_btjd)?.toFixed(3)}<br>
+      <button id="dlBtn" style="margin-top:8px;background:#131721;border:1px solid #2a2e3a;color:#eaf6ff;padding:6px 10px;border-radius:8px;cursor:pointer;">Download JSON</button>
+    </div>`;
+  host.querySelector('#dlBtn').addEventListener('click', () => {
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `inference_${jobId}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // ========== BEGIN visibility integration ==========
+  // 1) Next-transit JD
+  let btjdNext = Number(d.next_transit_btjd);
+  if (!isFinite(btjdNext)) {
+    const t0 = Number(d.t0_btjd ?? d.epoch_btjd ?? 0);
+    const P  = Number(d.period_days);
+    const nowJD = window.jdFromUTC(new Date());
+    const nowBTJD = nowJD - 2457000.0;
+    const n = Math.max(0, Math.ceil((nowBTJD - t0)/P));
+    btjdNext = t0 + n*P;
+  }
+  const jdMid = window.jdFromBTJD(btjdNext);
+  const durH = Number(d.duration_hours ?? (Number(d.duration_days)||0)*24 || 2);
+
+  // 2) RA/Dec via MAST (TIC preferred, then KIC)
+  const idType = (d.host_id_type || '').toUpperCase();
+  const hostId = d.host_id ?? d.target_id;
+  let raDeg = null, decDeg = null;
+
+  try {
+    if (idType === 'TIC' && hostId != null) {
+      const rows = await window.fetchTICbyId(hostId);
+      if (Array.isArray(rows) && rows.length) {
+        raDeg  = Number(rows[0].ra);
+        decDeg = Number(rows[0].dec);
+      }
+    } else if (idType === 'KIC' && hostId != null) {
+      const rows = await window.fetchKICbyId(hostId);
+      if (Array.isArray(rows) && rows.length) {
+        raDeg  = Number(rows[0].ra);
+        decDeg = Number(rows[0].dec);
+      }
+    }
+  } catch (e) { console.warn('RA/Dec fetch failed:', e); }
+
+  // 3) Visibility -> globe pins
+  if (isFinite(raDeg) && isFinite(decDeg)) {
+    const bundles = window.computeVisibilityPins(raDeg, decDeg, jdMid, durH);
+    if (window.placeRegionPins) window.placeRegionPins(bundles);
+  } else {
+    console.warn('No RA/Dec available; skipping visibility pins.');
+  }
+  // ========== END visibility integration ==========
+})
               })
               .catch(err => console.warn('Failed to fetch inference JSON:', err));
           }
